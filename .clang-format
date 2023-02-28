@@ -1,0 +1,11 @@
+---
+BasedOnStyle: WebKit
+BreakBeforeBraces: Allman
+AlignConsecutiveMacros: true
+IncludeBlocks: Preserve
+AlignConsecutiveAssignments: 
+    Enabled: true
+    AcrossEmptyLines: true
+    AcrossComments: true
+    AlignCompound: true
+...
