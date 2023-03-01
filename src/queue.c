@@ -6,18 +6,12 @@
 typedef struct fifo_item
 {
     size_t len;
-    size_t block_len;
     struct fifo_item* next;
     uint8_t data;
 } fifo_item_t;
 
 #define FIFO_HDR_LEN sizeof(fifo_item_t) - 1
 
-typedef struct free_block
-{
-    struct free_block* next;
-    size_t len;
-} free_block_t;
 #pragma pack(pop)
 
 int msg_fifo_init(msg_fifo_t queue, uint8_t* buf, size_t buf_len)
@@ -34,127 +28,116 @@ int msg_fifo_init(msg_fifo_t queue, uint8_t* buf, size_t buf_len)
         return -1;
     }
 
-    queue.buffer              = buf;
-    queue.buffer_len          = buf_len;
-    queue.first               = NULL;
-    queue.free_blocks         = buf;
-
-    free_block_t* free_blocks = queue.free_blocks;
-
-    free_blocks->len          = buf_len;
-    free_blocks->next         = NULL;
+    queue.start      = buf;
+    queue.buffer_len = buf_len;
+    queue.first      = NULL;
+    queue.last       = NULL;
+    queue.head       = buf;
 
     return 0;
 }
 
-inline void combine_consecutive_blocks(free_block_t* block)
+inline fifo_item_t* fifo_add_new_item(msg_fifo_t* queue, size_t msg_len)
 {
-    while (block->next == block + block->len)
+    fifo_item_t* new_item = queue->head;
+    new_item->next        = NULL;
+    new_item->len         = msg_len;
+
+    if (queue->last == NULL)
     {
-        block->len  += block->next->len;
-        block->next = block->next->next;
+        queue->first = new_item;
+        queue->last  = new_item;
     }
+    else
+    {
+        ((fifo_item_t*)queue->last)->next = new_item;
+        queue->last                       = new_item;
+    }
+
+    return new_item;
 }
 
 size_t msg_fifo_push(msg_fifo_t* queue, void* msg, size_t msg_len)
 {
-    free_block_t* cur_block       = queue->free_blocks;
-    free_block_t* prev_block      = NULL;
-
-    free_block_t* best_fit        = NULL;
-    free_block_t* best_fit_before = NULL;
-    size_t last_fit               = SIZE_MAX;
-    size_t complete_msg_len       = msg_len + FIFO_HDR_LEN;
-
-    while (cur_block != NULL)
+    void* end = queue->start + queue->buffer_len;
+    if (queue->head + msg_len + FIFO_HDR_LEN >= end)
     {
-        combine_consecutive_blocks(cur_block);
-        if (cur_block->len >= complete_msg_len)
+        size_t first_block_len = end - queue->head;
+        if (first_block_len < FIFO_HDR_LEN)
         {
-            size_t cur_fit = cur_block->len - complete_msg_len;
-            if (cur_fit < last_fit)
+            queue->head = queue->start;
+
+            if (queue->head + msg_len + FIFO_HDR_LEN >= queue->start)
             {
-                last_fit        = cur_fit;
-                best_fit        = cur_block;
-                best_fit_before = prev_block;
+                // We would overwrite the first message, do not insert.
+                return 0;
             }
-        }
 
-        prev_block = cur_block;
-        cur_block  = cur_block->next;
-    }
+            fifo_item_t* new_item = fifo_add_new_item(queue, msg_len);
 
-    if (best_fit != NULL)
-    {
-        fifo_item_t* last = queue->last;
-        fifo_item_t* item = (fifo_item_t*)best_fit;
-
-        if (last_fit < sizeof(free_block_t))
-        {
-            item->block_len = complete_msg_len + last_fit;
+            memcpy(&new_item->data, msg, msg_len);
+            queue->head = queue->start + msg_len;
         }
         else
         {
-            free_block_t* new_block = (void*)item + complete_msg_len;
-            new_block->len          = last_fit;
-            new_block->next         = best_fit->next;
-            if (best_fit_before != NULL)
+            if (queue->start + (msg_len + FIFO_HDR_LEN) - first_block_len >= queue->start)
             {
-                best_fit_before->next = new_block;
+                // We would overwrite the first message, do not insert.
+                return 0;
             }
-            else
-            {
-                queue->free_blocks = new_block;
-            }
+            fifo_item_t* new_item = fifo_add_new_item(queue, msg_len);
 
-            item->block_len = complete_msg_len;
+            memcpy(&new_item->data, msg, first_block_len);
+            memcpy(queue->start, msg + first_block_len, msg_len - first_block_len);
+            queue->head = queue->start + (msg_len - first_block_len);
+        }
+    }
+    else
+    {
+        if (queue->head + msg_len + FIFO_HDR_LEN >= queue->first)
+        {
+            // We would overwrite the first message, do not insert.
+            return 0;
         }
 
-        item->next = NULL;
-        last->next = item;
-        item->len  = msg_len;
+        fifo_item_t* new_item = fifo_add_new_item(queue, msg_len);
 
-        memcpy(&item->data, msg, item->len);
+        memcpy(&new_item->data, msg, msg_len);
 
-        return 0;
+        queue->head += msg_len + FIFO_HDR_LEN;
     }
-
-    return 0;
+    return msg_len;
 }
 
 size_t msg_fifo_pop(msg_fifo_t* queue, void* out_msg, size_t out_msg_len)
 {
-    fifo_item_t* item = queue->first;
-
-    if (item->len > out_msg_len)
+    if (queue->first != NULL)
     {
-        return 0;
-    }
+        fifo_item_t* first = queue->first;
 
-    queue->first = item->next;
-
-    memcpy(out_msg, &item->data, item->len);
-
-    size_t ret               = item->len;
-
-    uintptr_t item_ptr       = (uintptr_t)item;
-    free_block_t* cur_block  = queue->free_blocks;
-    free_block_t* prev_block = queue->free_blocks;
-
-    while (item_ptr > (uintptr_t)cur_block)
-    {
-        prev_block = cur_block;
-        if (cur_block->next == NULL)
+        if (first->len <= out_msg_len)
         {
-            break;
+            void* end      = queue->start + queue->buffer_len;
+
+            void* item_end = first + first->len + FIFO_HDR_LEN;
+
+            queue->first   = first->next;
+
+            if (item_end > end)
+            {
+                // This message is split.
+                size_t first_block_len = end - (void*)(first + FIFO_HDR_LEN);
+
+                memcpy(&first->data, out_msg, first_block_len);
+                memcpy(queue->start, out_msg + first_block_len, first->len - first_block_len);
+            }
+            else
+            {
+                memcpy(&first->data, out_msg, first->len);
+            }
+
+            return first->len;
         }
-        cur_block = cur_block->next;
     }
-
-    free_block_t* new_block = (free_block_t*)item;
-    new_block->len          = item->block_len;
-    new_block->next         = prev_block->next;
-    prev_block->next        = new_block;
-
-    return ret;
+    return 0;
 }

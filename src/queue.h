@@ -7,9 +7,9 @@ typedef struct msg_fifo
 {
     void* first;
     void* last;
-    void* buffer;
+    void* head;
+    void* start;
     size_t buffer_len;
-    void* free_blocks;
 } msg_fifo_t;
 
 int msg_fifo_init(msg_fifo_t queue, uint8_t* buf, size_t buf_len);
