@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include "usbip.h"
+#include "vhci.h"
 
 void cb(uint8_t* ptr)
 {

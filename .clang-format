@@ -3,6 +3,7 @@ BasedOnStyle: WebKit
 BreakBeforeBraces: Allman
 AlignConsecutiveMacros: true
 IncludeBlocks: Preserve
+ColumnLimit: 100
 AlignConsecutiveAssignments: 
     Enabled: true
     AcrossEmptyLines: true

@@ -29,10 +29,10 @@ typedef struct hdr_rep_devlist
 
 typedef struct hdr_cmd
 {
-#define CMD_SUBMIT 0x01
-#define RET_SUBMIT 0x03
-#define CMD_UNLINK 0x02
-#define RET_UNLINK 0x04
+#define USBIP_CMD_SUBMIT 0x01
+#define USBIP_RET_SUBMIT 0x03
+#define USBIP_CMD_UNLINK 0x02
+#define USBIP_RET_UNLINK 0x04
     uint32_t command;
     uint32_t seq_num;
     uint16_t busnum;
@@ -65,5 +65,20 @@ typedef struct cmd
     uint8_t* txfer_buffer;
     iso_packet_t* iso_packets;
 } cmd_t;
+
+typedef struct ret
+{
+    struct ret_base
+    {
+        uint32_t status;
+        uint32_t actual_length;
+        uint32_t start_frame;
+        uint32_t number_of_packets;
+        uint32_t error_count;
+        uint64_t padding;
+    } base;
+    uint8_t* txfer_buffer;
+    iso_packet_t* iso_packets;
+} ret_t;
 
 #pragma pack(pop)

@@ -1,23 +1,22 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
-
 #include <netinet/tcp.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include "conv.h"
+#include "queue.h"
 #include "usbip.h"
 #include "usbip_types.h"
-#include <stdio.h>
 
-// #define USBIP_STATIC_CLIENT_POOL_SIZE 5
 #if !defined(USBIP_STATIC_CLIENT_POOL_SIZE) || !defined(USBIP_DEVICE_POOL_SIZE)
 #include <memory.h>
 #endif
 
-#define DEV_SIZE sizeof(usb_dev_t) - sizeof(dev_urb_cb_t) - sizeof(usb_if_t*)
+#define DEV_INFO_SIZE sizeof(struct dev_info)
 
 #ifdef USBIP_CLIENT_POOL_SIZE
 static mem_pool_t client_mem_pool;
@@ -81,6 +80,8 @@ typedef struct usbip_client
 {
     int sock;
     usb_dev_t* imported_dev;
+    msg_fifo_t queue;
+
 } usbip_client_t;
 
 void sock_stop(int sock)
@@ -119,16 +120,32 @@ int add_client(usbip_server_t* handle, int sock)
     return 0;
 }
 
+/*int client_try_send(usbip_server_t* handle, usbip_client_t* client, size_t i)
+{
+    size_t remaining = len;
+    while (remaining != 0)
+    {
+        int bytes = send(client->sock, tmp_buf + (len - remaining), remaining, 0);
+
+        if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+        {
+            client_stop(handle, client, i);
+            return 1;
+        }
+
+        remaining -= bytes;
+    }
+}*/
+
 int dev_list_cpy(void* data, size_t i, void* ctx)
 {
-    const size_t dev_len = sizeof(usb_dev_t) - sizeof(dev_urb_cb_t) - sizeof(usb_if_t*);
-    usb_dev_t* dev       = data;
-    size_t* out_idx      = ctx;
+    usb_dev_t* dev  = data;
+    size_t* out_idx = ctx;
 
-    uint8_t* out         = tmp_buf + *out_idx;
+    uint8_t* out    = tmp_buf + *out_idx;
 
-    out                  = memcpy(out, dev, sizeof(struct dev_info));
-    *out_idx             += dev_len;
+    out             = memcpy(out, dev, DEV_INFO_SIZE);
+    *out_idx        += DEV_INFO_SIZE;
 
     for (size_t if_idx = 0; if_idx < dev->info.interface_cnt; ++if_idx)
     {
@@ -169,16 +186,20 @@ int usbip_resp_devlist(usbip_server_t* handle, usbip_client_t* client, size_t i)
     return 0;
 }
 
-int dev_idx = -1;
+typedef struct find_dev_info
+{
+    char busid[32];
+    usb_dev_t* dev;
+} find_dev_info_t;
 
 int find_dev(void* data, size_t i, void* ctx)
 {
-    usb_dev_t* dev = data;
-    char* busid    = ctx;
+    find_dev_info_t* info = ctx;
+    usb_dev_t* dev        = data;
 
-    if (strncmp(busid, dev->info.busid, 32) == 0)
+    if (strncmp(info->busid, dev->info.busid, 32) == 0)
     {
-        dev_idx = i;
+        info->dev = NULL;
     }
 
     return 0;
@@ -186,31 +207,30 @@ int find_dev(void* data, size_t i, void* ctx)
 
 int usbip_handle_import(usbip_server_t* handle, usbip_client_t* client, size_t i)
 {
-    dev_idx = -1;
-    char busid[32];
+    find_dev_info_t find_info = { .dev = NULL };
 
-    int bytes = recv(client->sock, busid, sizeof(busid), 0);
+    int bytes                 = recv(client->sock, find_info.busid, sizeof(find_info.busid), 0);
 
     if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
     {
         return 1;
     }
 
-    linked_list_iter(&handle->dev_list, find_dev, busid);
+    linked_list_iter(&handle->dev_list, find_dev, &find_info);
 
     hdr_common_t* hdr = (hdr_common_t*)tmp_buf;
 
     hdr->version      = TO_NETWORK_ENDIAN_U16(USBIP_VERSION);
     hdr->op_code      = TO_NETWORK_ENDIAN_U16(REP_IMPORT);
 
-    if (dev_idx >= 0)
+    if (find_info.dev != NULL)
     {
-        usb_dev_t* dev = linked_list_get(&handle->dev_list, dev_idx);
+        usb_dev_t* dev = find_info.dev;
 
         hdr->status    = USBIP_STATUS_OK;
-        memcpy(tmp_buf + sizeof(hdr_common_t), dev, sizeof(usb_dev_t) - sizeof(dev_urb_cb_t) - sizeof(usb_if_t*));
+        memcpy(tmp_buf + sizeof(hdr_common_t), dev, DEV_INFO_SIZE);
 
-        size_t idx    = sizeof(hdr_common_t) + DEV_SIZE;
+        size_t idx    = sizeof(hdr_common_t) + DEV_INFO_SIZE;
 
         int remaining = idx;
 
@@ -352,9 +372,9 @@ int usbip_server_setup(usbip_server_t* handle)
 
     memset(&addr, 0, sizeof(struct sockaddr_in));
 
-    addr.sin_port   = TO_NETWORK_ENDIAN_U16(3240);
-    addr.sin_family = AF_INET;
-    inet_pton(AF_INET, "0.0.0.0", &(addr.sin_addr));
+    addr.sin_port        = TO_NETWORK_ENDIAN_U16(3240);
+    addr.sin_family      = AF_INET;
+    addr.sin_addr.s_addr = 0;
 
     if (bind(handle->listen_sock, (struct sockaddr*)&addr, sizeof(struct sockaddr_in)) == -1)
     {
@@ -448,16 +468,6 @@ int usbip_client_handle(void* data, size_t i, void* ctx)
             cmd.devnum    = FROM_NETWORK_ENDIAN_U16(cmd.devnum);
             cmd.direction = FROM_NETWORK_ENDIAN_U16(cmd.direction);
             cmd.endpoint  = FROM_NETWORK_ENDIAN_U16(cmd.endpoint);
-
-            switch (cmd.command)
-            {
-            case CMD_SUBMIT:
-                break;
-            case CMD_UNLINK:
-                break;
-            default:
-                break;
-            }
         }
         else if (bytes == 0)
         {
