@@ -10,7 +10,8 @@ set(SRCS
     linked_list.c 
     mem_pool.c
     queue.c
-    vhci.c
+    usb/vhci.c
+    usb/dev.c
 )
 
 add_compile_options(-Wall -Werror -Wno-unused)
