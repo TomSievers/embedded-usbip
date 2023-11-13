@@ -81,7 +81,7 @@ int vhci_init(vhci_handle_t* handle)
         return -1;
     }
 
-    return 1;
+    return 0;
 }
 
 void vhci_urb_complete(vusb_dev_t* dev, urb_t* urb, void* ctx)
@@ -370,7 +370,7 @@ int vhci_register_dev(vhci_handle_t* handle, usb_dev_t* dev)
 {
     if (handle == NULL || dev == NULL)
     {
-        return 0;
+        return -1;
     }
 
     dev->busnum           = 1;
@@ -393,7 +393,7 @@ int vhci_register_dev(vhci_handle_t* handle, usb_dev_t* dev)
     snprintf(dev->path, 256, "/dev/bus/usb/%03d/%03d", dev->busnum, dev->devnum);
     snprintf(dev->busid, 32, "%u-%u", dev->busnum, dev->devnum);
 
-    return 1;
+    return 0;
 }
 
 typedef struct vhci_iter_ctx

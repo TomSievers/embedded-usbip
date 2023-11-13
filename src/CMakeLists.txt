@@ -20,8 +20,8 @@ add_library(${PROJECT_NAME} STATIC ${SRCS} ${HEADERS})
 
 if(NOT EXISTS LIBRARY_ONLY)
 
-add_executable(${PROJECT_NAME}-app main.c )
+    add_executable(${PROJECT_NAME}-app main.c )
 
-target_link_libraries(${PROJECT_NAME}-app ${PROJECT_NAME})
+    target_link_libraries(${PROJECT_NAME}-app ${PROJECT_NAME})
 
 endif()

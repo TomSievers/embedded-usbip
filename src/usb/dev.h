@@ -166,15 +166,15 @@ int usb_dev_add_string(usb_dev_t* dev, usb_string_desc_t* string);
 
 int usb_dev_add_config(usb_dev_t* dev, usb_conf_t* conf);
 
-int usb_conf_add_if_grp(usb_conf_t* conf, usb_if_group_t* if_group);
-
 int usb_dev_add_if_grp(usb_dev_t* dev, uint8_t conf_idx, usb_if_group_t* if_group);
+
+int usb_dev_add_ep(usb_dev_t* dev, uint8_t conf_idx, uint8_t if_idx, uint8_t if_alt, usb_ep_t* ep);
+
+int usb_conf_add_if_grp(usb_conf_t* conf, usb_if_group_t* if_group);
 
 int usb_if_add_ep(usb_if_t* interface, usb_ep_t* ep);
 
 int usb_if_grp_add(usb_if_group_t* group, usb_if_t* interface);
-
-int usb_dev_add_ep(usb_dev_t* dev, uint8_t conf_idx, uint8_t if_idx, uint8_t if_alt, usb_ep_t* ep);
 
 usb_conf_t* usb_dev_get_config(usb_dev_t* dev, uint8_t conf_idx);
 
