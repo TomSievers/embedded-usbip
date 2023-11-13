@@ -30,15 +30,15 @@ void* _dev_node_mem_alloc(size_t n) { return mem_pool_alloc(dev_node_mem_pool); 
 
 void* _dev_node_mem_free(void* obj) { return mem_pool_free(dev_node_mem_pool, obj); }
 
-alloc_fn dev_alloc      = _dev_mem_alloc;
+alloc_fn dev_alloc = _dev_mem_alloc;
 alloc_fn dev_node_alloc = _dev_node_mem_alloc;
-free_fn dev_free        = _dev_mem_free;
-free_fn dev_node_free   = _dev_node_mem_free;
+free_fn dev_free = _dev_mem_free;
+free_fn dev_node_free = _dev_node_mem_free;
 #else
-alloc_fn dev_alloc      = malloc;
+alloc_fn dev_alloc = malloc;
 alloc_fn dev_node_alloc = malloc;
-free_fn dev_free        = free;
-free_fn dev_node_free   = free;
+free_fn dev_free = free;
+free_fn dev_node_free = free;
 #endif
 
 #ifdef URB_POOL_SIZE
@@ -50,10 +50,10 @@ void* _urb_mem_alloc(size_t n) { return mem_pool_alloc(urb_mem_pool); }
 void* _urb_mem_free(void* obj) { return mem_pool_free(urb_mem_pool, obj); }
 
 alloc_fn urb_alloc = _urb_mem_alloc;
-free_fn urb_free   = _urb_mem_free;
+free_fn urb_free = _urb_mem_free;
 #else
-alloc_fn urb_alloc      = malloc;
-free_fn urb_free        = free;
+alloc_fn urb_alloc = malloc;
+free_fn urb_free = free;
 #endif
 
 static void stop_sock(int* sock)
@@ -88,18 +88,18 @@ void vhci_urb_complete(vusb_dev_t* dev, urb_t* urb, void* ctx)
 {
     uint16_t seq_num = *((uint16_t*)ctx);
     uint8_t buf[512];
-    hdr_cmd_t* hdr       = (hdr_cmd_t*)buf;
+    hdr_cmd_t* hdr = (hdr_cmd_t*)buf;
     struct ret_base* ret = (struct ret_base*)(buf + sizeof(hdr_cmd_t));
-    uint8_t* data        = (buf + URB_RET_HDR_SIZE);
+    uint8_t* data = (buf + URB_RET_HDR_SIZE);
     memset(hdr, 0, sizeof(hdr_cmd_t));
-    hdr->command           = USBIP_RET_SUBMIT;
-    hdr->seq_num           = seq_num;
+    hdr->command = USBIP_RET_SUBMIT;
+    hdr->seq_num = seq_num;
 
-    ret->actual_length     = urb->actual_length;
-    ret->error_count       = urb->error_count;
+    ret->actual_length = urb->actual_length;
+    ret->error_count = urb->error_count;
     ret->number_of_packets = urb->number_of_packets;
-    ret->start_frame       = urb->start_frame;
-    ret->status            = urb->status;
+    ret->start_frame = urb->start_frame;
+    ret->status = urb->status;
 
     for (size_t i = 0; i < urb->actual_length; ++i)
     {
@@ -111,9 +111,9 @@ void vhci_urb_complete(vusb_dev_t* dev, urb_t* urb, void* ctx)
 
 void handle_get_desc(vusb_dev_t* dev, urb_t* urb)
 {
-    uint8_t desc_type  = urb->setup_packet.wValue >> 8;
+    uint8_t desc_type = urb->setup_packet.wValue >> 8;
     uint8_t desc_index = urb->setup_packet.wValue;
-    urb->status        = -EINVAL;
+    urb->status = -EINVAL;
     if (urb->transfer_buffer != NULL && urb->transfer_buffer_length > 2
         && desc_type <= USB_DESC_TYPE_IF_PWR)
     {
@@ -121,10 +121,10 @@ void handle_get_desc(vusb_dev_t* dev, urb_t* urb)
         {
         case USB_DESC_TYPE_DEV:
         {
-            void* dest           = urb->transfer_buffer;
+            void* dest = urb->transfer_buffer;
 
-            usb_desc_hdr_t* hdr  = dest;
-            hdr->bLength         = sizeof(usb_dev_desc_t) + sizeof(usb_desc_hdr_t);
+            usb_desc_hdr_t* hdr = dest;
+            hdr->bLength = sizeof(usb_dev_desc_t) + sizeof(usb_desc_hdr_t);
             hdr->bDescriptorType = USB_DESC_TYPE_CONF;
 
             usb_dev_desc_t* desc = &dev->dev->desc;
@@ -135,12 +135,12 @@ void handle_get_desc(vusb_dev_t* dev, urb_t* urb)
         }
         case USB_DESC_TYPE_CONF:
         {
-            ssize_t remaining    = urb->transfer_buffer_length;
-            usb_conf_t* conf     = usb_dev_get_config(dev->dev, desc_index);
-            void* dest           = urb->transfer_buffer;
-            usb_desc_hdr_t* hdr  = dest;
+            ssize_t remaining = urb->transfer_buffer_length;
+            usb_conf_t* conf = usb_dev_get_config(dev->dev, desc_index);
+            void* dest = urb->transfer_buffer;
+            usb_desc_hdr_t* hdr = dest;
             hdr->bDescriptorType = USB_DESC_TYPE_CONF;
-            hdr->bLength         = sizeof(usb_conf_desc_t) + sizeof(usb_desc_hdr_t);
+            hdr->bLength = sizeof(usb_conf_desc_t) + sizeof(usb_desc_hdr_t);
             if (conf != NULL)
             {
                 if ((remaining -= hdr->bLength) < 0)
@@ -157,9 +157,9 @@ void handle_get_desc(vusb_dev_t* dev, urb_t* urb)
                     usb_if_t* cur_if = cur_if_grp->interfaces;
                     while (cur_if_grp != NULL)
                     {
-                        hdr                  = dest;
+                        hdr = dest;
                         hdr->bDescriptorType = USB_DESC_TYPE_IF;
-                        hdr->bLength         = sizeof(usb_if_desc_t) + sizeof(usb_desc_hdr_t);
+                        hdr->bLength = sizeof(usb_if_desc_t) + sizeof(usb_desc_hdr_t);
 
                         if ((remaining -= hdr->bLength) < 0)
                         {
@@ -175,9 +175,9 @@ void handle_get_desc(vusb_dev_t* dev, urb_t* urb)
 
                         while (ep != NULL)
                         {
-                            hdr                  = dest;
+                            hdr = dest;
                             hdr->bDescriptorType = USB_DESC_TYPE_EP;
-                            hdr->bLength         = sizeof(usb_ep_desc_t) + sizeof(usb_desc_hdr_t);
+                            hdr->bLength = sizeof(usb_ep_desc_t) + sizeof(usb_desc_hdr_t);
 
                             if ((remaining -= hdr->bLength) < 0)
                             {
@@ -214,13 +214,13 @@ void handle_get_desc(vusb_dev_t* dev, urb_t* urb)
                     return;
                 }
 
-                usb_desc_hdr_t* hdr                         = dest;
-                hdr->bDescriptorType                        = USB_DESC_TYPE_STR;
-                hdr->bLength                                = sizeof(usb_desc_hdr_t) + 2;
+                usb_desc_hdr_t* hdr = dest;
+                hdr->bDescriptorType = USB_DESC_TYPE_STR;
+                hdr->bLength = sizeof(usb_desc_hdr_t) + 2;
 
                 *((uint16_t*)dest + sizeof(usb_desc_hdr_t)) = dev->dev->lang_id;
 
-                urb->actual_length                          = hdr->bLength;
+                urb->actual_length = hdr->bLength;
             }
             else
             {
@@ -232,7 +232,7 @@ void handle_get_desc(vusb_dev_t* dev, urb_t* urb)
                     return;
                 }
 
-                size_t len      = wcsnlen(str->string, 255 / sizeof(wchar_t));
+                size_t len = wcsnlen(str->string, 255 / sizeof(wchar_t));
                 size_t byte_len = len * sizeof(wchar_t);
 
                 if (urb->transfer_buffer_length < sizeof(usb_desc_hdr_t) + byte_len)
@@ -241,9 +241,9 @@ void handle_get_desc(vusb_dev_t* dev, urb_t* urb)
                     return;
                 }
 
-                usb_desc_hdr_t* hdr  = dest;
+                usb_desc_hdr_t* hdr = dest;
                 hdr->bDescriptorType = USB_DESC_TYPE_STR;
-                hdr->bLength         = sizeof(usb_desc_hdr_t) + byte_len;
+                hdr->bLength = sizeof(usb_desc_hdr_t) + byte_len;
                 memcpy(urb->transfer_buffer + sizeof(usb_desc_hdr_t), str, byte_len);
                 urb->actual_length = hdr->bLength;
             }
@@ -259,8 +259,8 @@ void handle_get_desc(vusb_dev_t* dev, urb_t* urb)
 void handle_urb(vusb_dev_t* dev, urb_t* urb)
 {
     uint8_t direction = PIPE_DIR(urb->pipe);
-    uint8_t ep        = PIPE_EP(urb->pipe);
-    uint8_t type      = PIPE_TYPE(urb->pipe);
+    uint8_t ep = PIPE_EP(urb->pipe);
+    uint8_t type = PIPE_TYPE(urb->pipe);
     if (ep == 0 && type == PIPE_TYPE_CTRL)
     {
         urb->actual_length = 0;
@@ -268,17 +268,17 @@ void handle_urb(vusb_dev_t* dev, urb_t* urb)
         {
         case DEV_REQ_STATUS:
         {
-            uint16_t idx                         = urb->setup_packet.wIndex;
-            uint8_t type                         = urb->setup_packet.bmRequestType.recipient;
+            uint16_t idx = urb->setup_packet.wIndex;
+            uint8_t type = urb->setup_packet.bmRequestType.recipient;
 
-            urb->actual_length                   = 2;
+            urb->actual_length = 2;
             ((uint16_t*)urb->transfer_buffer)[0] = 0;
             break;
         }
         case DEV_REQ_CLR_FEAT:
         {
-            uint16_t idx     = urb->setup_packet.wIndex;
-            uint8_t type     = urb->setup_packet.bmRequestType.recipient;
+            uint16_t idx = urb->setup_packet.wIndex;
+            uint8_t type = urb->setup_packet.bmRequestType.recipient;
             uint16_t feature = urb->setup_packet.wValue;
 
             // TODO: IMPL
@@ -286,9 +286,9 @@ void handle_urb(vusb_dev_t* dev, urb_t* urb)
         }
         case DEV_REQ_SET_FEAT:
         {
-            uint8_t idx      = urb->setup_packet.wIndex & 0xFF;
-            uint8_t test     = urb->setup_packet.wIndex >> 8;
-            uint8_t type     = urb->setup_packet.bmRequestType.recipient;
+            uint8_t idx = urb->setup_packet.wIndex & 0xFF;
+            uint8_t test = urb->setup_packet.wIndex >> 8;
+            uint8_t type = urb->setup_packet.bmRequestType.recipient;
             uint16_t feature = urb->setup_packet.wValue;
 
             // TODO: IMPL
@@ -305,8 +305,8 @@ void handle_urb(vusb_dev_t* dev, urb_t* urb)
                 && direction == PIPE_IN)
             {
                 ((uint8_t*)urb->transfer_buffer)[0] = dev->dev->cur_config;
-                urb->status                         = 0;
-                urb->actual_length                  = 1;
+                urb->status = 0;
+                urb->actual_length = 1;
             }
             else
             {
@@ -317,12 +317,12 @@ void handle_urb(vusb_dev_t* dev, urb_t* urb)
         }
         case DEV_REQ_SET_CONF:
         {
-            uint8_t config   = urb->setup_packet.wValue & 0xFF;
+            uint8_t config = urb->setup_packet.wValue & 0xFF;
             usb_conf_t* conf = usb_dev_get_config(dev->dev, config);
             if (conf != NULL)
             {
                 dev->dev->cur_config = conf->desc.bConfigurationValue;
-                urb->actual_length   = 0;
+                urb->actual_length = 0;
             }
             else
             {
@@ -332,8 +332,8 @@ void handle_urb(vusb_dev_t* dev, urb_t* urb)
         }
         case DEV_REQ_GET_IF:
         {
-            urb->status            = EINVAL;
-            uint16_t idx           = urb->setup_packet.wIndex;
+            urb->status = EINVAL;
+            uint16_t idx = urb->setup_packet.wIndex;
 
             usb_if_group_t* cur_if = usb_dev_get_if_grp(dev->dev, dev->dev->cur_config, idx);
 
@@ -341,7 +341,7 @@ void handle_urb(vusb_dev_t* dev, urb_t* urb)
             {
                 ((uint8_t*)urb->transfer_buffer)[0] = cur_if->cur_alt_set;
 
-                urb->actual_length                  = 1;
+                urb->actual_length = 1;
             }
 
             break;
@@ -373,13 +373,13 @@ int vhci_register_dev(vhci_handle_t* handle, usb_dev_t* dev)
         return -1;
     }
 
-    dev->busnum           = 1;
-    dev->devnum           = 1;
-    dev->bus              = 1;
+    dev->busnum = 1;
+    dev->devnum = 1;
+    dev->bus = 1;
 
-    vusb_dev_t* vdev      = malloc(sizeof(vusb_dev_t));
+    vusb_dev_t* vdev = malloc(sizeof(vusb_dev_t));
 
-    vdev->dev             = dev;
+    vdev->dev = dev;
 
     vusb_dev_t* last_vdev = linked_list_get(&handle->devices, handle->devices.size - 1);
 
@@ -414,7 +414,7 @@ int vhci_iter_devices(vhci_handle_t* handle, vhci_iter_cb cb, void* ctx)
 {
     vhci_iter_ctx_t iter_ctx = {
         .user_ctx = ctx,
-        .user_cb  = cb,
+        .user_cb = cb,
     };
 
     linked_list_iter(&handle->devices, vhci_iter_internal, &iter_ctx);
@@ -431,7 +431,7 @@ typedef struct vhci_find_dev_ctx
 int vhci_find_dev_iter(void* data, size_t idx, void* ctx)
 {
     vhci_find_dev_ctx_t* find_ctx = ctx;
-    vusb_dev_t* dev               = data;
+    vusb_dev_t* dev = data;
 
     if (strncmp(find_ctx->busid, dev->dev->busid, 32) == 0)
     {
@@ -445,7 +445,7 @@ vusb_dev_t* vhci_find_device(vhci_handle_t* handle, const char* busid)
 {
     vhci_find_dev_ctx_t ctx = {
         .busid = busid,
-        .dev   = NULL,
+        .dev = NULL,
     };
     linked_list_iter(&handle->devices, vhci_find_dev_iter, &ctx);
 
@@ -455,7 +455,7 @@ vusb_dev_t* vhci_find_device(vhci_handle_t* handle, const char* busid)
 int vhci_handle_dev(void* data, size_t idx, void* ctx)
 {
     vhci_handle_t* handle = ctx;
-    vusb_dev_t* dev       = data;
+    vusb_dev_t* dev = data;
 
     if (dev->client != NO_SOCK)
     {
@@ -470,12 +470,12 @@ int vhci_handle_dev(void* data, size_t idx, void* ctx)
         }
         else if (bytes == sizeof(hdr_cmd_t))
         {
-            cmd.command   = FROM_NETWORK_ENDIAN_U16(cmd.command);
-            cmd.seq_num   = FROM_NETWORK_ENDIAN_U16(cmd.seq_num);
-            cmd.busnum    = FROM_NETWORK_ENDIAN_U16(cmd.busnum);
-            cmd.devnum    = FROM_NETWORK_ENDIAN_U16(cmd.devnum);
+            cmd.command = FROM_NETWORK_ENDIAN_U16(cmd.command);
+            cmd.seq_num = FROM_NETWORK_ENDIAN_U16(cmd.seq_num);
+            cmd.busnum = FROM_NETWORK_ENDIAN_U16(cmd.busnum);
+            cmd.devnum = FROM_NETWORK_ENDIAN_U16(cmd.devnum);
             cmd.direction = FROM_NETWORK_ENDIAN_U16(cmd.direction);
-            cmd.endpoint  = FROM_NETWORK_ENDIAN_U16(cmd.endpoint);
+            cmd.endpoint = FROM_NETWORK_ENDIAN_U16(cmd.endpoint);
         }
         else if (bytes == 0)
         {

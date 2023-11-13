@@ -28,11 +28,11 @@ int msg_fifo_init(msg_fifo_t queue, uint8_t* buf, size_t buf_len)
         return -1;
     }
 
-    queue.start      = buf;
+    queue.start = buf;
     queue.buffer_len = buf_len;
-    queue.first      = NULL;
-    queue.last       = NULL;
-    queue.head       = buf;
+    queue.first = NULL;
+    queue.last = NULL;
+    queue.head = buf;
 
     return 0;
 }
@@ -40,18 +40,18 @@ int msg_fifo_init(msg_fifo_t queue, uint8_t* buf, size_t buf_len)
 inline fifo_item_t* fifo_add_new_item(msg_fifo_t* queue, size_t msg_len)
 {
     fifo_item_t* new_item = queue->head;
-    new_item->next        = NULL;
-    new_item->len         = msg_len;
+    new_item->next = NULL;
+    new_item->len = msg_len;
 
     if (queue->last == NULL)
     {
         queue->first = new_item;
-        queue->last  = new_item;
+        queue->last = new_item;
     }
     else
     {
         ((fifo_item_t*)queue->last)->next = new_item;
-        queue->last                       = new_item;
+        queue->last = new_item;
     }
 
     return new_item;
@@ -117,11 +117,11 @@ size_t msg_fifo_pop(msg_fifo_t* queue, void* out_msg, size_t out_msg_len)
 
         if (first->len <= out_msg_len)
         {
-            void* end      = queue->start + queue->buffer_len;
+            void* end = queue->start + queue->buffer_len;
 
             void* item_end = first + first->len + FIFO_HDR_LEN;
 
-            queue->first   = first->next;
+            queue->first = first->next;
 
             if (item_end > end)
             {

@@ -3,11 +3,11 @@
 usb_dev_t usb_dev_create(usb_dev_desc_t* desc, lang_id_t lang_id)
 {
     usb_dev_t dev = {
-        .desc           = *desc,
+        .desc = *desc,
         .configurations = NULL,
-        .strings        = NULL,
-        .cur_config     = -1,
-        .lang_id        = lang_id,
+        .strings = NULL,
+        .cur_config = -1,
+        .lang_id = lang_id,
     };
 
     dev.desc.bNumConfigurations = 0;
@@ -22,12 +22,12 @@ int usb_dev_add_config(usb_dev_t* dev, usb_conf_t* conf)
         return 0;
     }
 
-    conf->cur_if              = -1;
+    conf->cur_if = -1;
     conf->desc.bNumInterfaces = 0;
-    conf->next                = NULL;
+    conf->next = NULL;
     if (dev->configurations == NULL)
     {
-        dev->configurations          = conf;
+        dev->configurations = conf;
         dev->desc.bNumConfigurations = 1;
     }
     else
@@ -58,7 +58,7 @@ int usb_conf_add_if_grp(usb_conf_t* conf, usb_if_group_t* if_group)
 
     if (conf->interfaces == NULL)
     {
-        conf->interfaces          = if_group;
+        conf->interfaces = if_group;
         conf->desc.bNumInterfaces += if_group->if_count;
     }
     else
@@ -70,7 +70,7 @@ int usb_conf_add_if_grp(usb_conf_t* conf, usb_if_group_t* if_group)
             cur = cur->next;
         }
 
-        cur->next                 = if_group;
+        cur->next = if_group;
 
         conf->desc.bNumInterfaces += if_group->if_count;
     }
@@ -96,9 +96,9 @@ int usb_if_grp_add(usb_if_group_t* group, usb_if_t* interface)
 
     if (group->interfaces == NULL)
     {
-        group->if_count    = 1;
+        group->if_count = 1;
         group->cur_alt_set = interface->desc.bAlternateSetting;
-        group->interfaces  = interface;
+        group->interfaces = interface;
     }
     else
     {

@@ -29,12 +29,12 @@ int init_mem_pool(size_t obj_size, void* pool, size_t pool_size, mem_pool_t* out
         return -1;
     }
 
-    *(uintptr_t*)pool    = 0x1;
+    *(uintptr_t*)pool = 0x1;
 
     out_pool->free_block = pool;
     out_pool->pool_start = pool;
-    out_pool->obj_size   = obj_size;
-    out_pool->pool_size  = pool_size;
+    out_pool->obj_size = obj_size;
+    out_pool->pool_size = pool_size;
 
     return 0;
 }
@@ -68,6 +68,6 @@ void* mem_pool_alloc(mem_pool_t* pool)
 
 void mem_pool_free(mem_pool_t* pool, void* obj)
 {
-    *((void**)obj)   = pool->free_block;
+    *((void**)obj) = pool->free_block;
     pool->free_block = obj;
 }

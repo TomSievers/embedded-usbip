@@ -99,7 +99,7 @@ typedef struct usb_dev_desc
 
 typedef enum lang_id
 {
-    LANG_ID_NONE       = 0,
+    LANG_ID_NONE = 0,
     LANG_ID_ENGLISH_US = 0x0409
 } lang_id_t;
 

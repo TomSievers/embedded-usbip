@@ -15,7 +15,7 @@ uint64_t i_bswap64(uint64_t val)
 #else
 
 #define SWAP(val, type)                                                                            \
-    type tmp     = val;                                                                            \
+    type tmp = val;                                                                                \
     uint8_t* src = (uint8_t*)&tmp;                                                                 \
     uint8_t* dst = (uint8_t*)&val;                                                                 \
     for (uint_fast8_t i = 0; i < sizeof(type); ++i)                                                \
