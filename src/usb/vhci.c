@@ -370,6 +370,7 @@ int vhci_register_dev(vhci_handle_t* handle, usb_dev_t* dev)
 {
     if (handle == NULL || dev == NULL)
     {
+        errno = EINVAL;
         return -1;
     }
 
@@ -377,18 +378,32 @@ int vhci_register_dev(vhci_handle_t* handle, usb_dev_t* dev)
     dev->devnum = 1;
     dev->bus = 1;
 
-    vusb_dev_t* vdev = malloc(sizeof(vusb_dev_t));
+    vusb_dev_t* vdev = dev_alloc(sizeof(vusb_dev_t));
+
+    if (vdev == NULL)
+    {
+        errno = ENOMEM;
+        return -1;
+    }
 
     vdev->dev = dev;
 
     vusb_dev_t* last_vdev = linked_list_get(&handle->devices, handle->devices.size - 1);
 
-    linked_list_push(&handle->devices, vdev);
-
-    if (last_vdev != NULL)
+    if (last_vdev == NULL)
     {
-        dev->devnum = last_vdev->dev->devnum + 1;
+        dev_free(vdev);
+        errno = ECANCELED;
+        return -1;
     }
+
+    if (linked_list_push(&handle->devices, vdev) == -1)
+    {
+        dev_free(vdev);
+        return -1;
+    }
+
+    dev->devnum = last_vdev->dev->devnum + 1;
 
     snprintf(dev->path, 256, "/dev/bus/usb/%03d/%03d", dev->busnum, dev->devnum);
     snprintf(dev->busid, 32, "%u-%u", dev->busnum, dev->devnum);
@@ -410,7 +425,7 @@ int vhci_iter_internal(void* data, size_t idx, void* ctx)
     return 0;
 }
 
-int vhci_iter_devices(vhci_handle_t* handle, vhci_iter_cb cb, void* ctx)
+void vhci_iter_devices(vhci_handle_t* handle, vhci_iter_cb cb, void* ctx)
 {
     vhci_iter_ctx_t iter_ctx = {
         .user_ctx = ctx,
@@ -418,8 +433,6 @@ int vhci_iter_devices(vhci_handle_t* handle, vhci_iter_cb cb, void* ctx)
     };
 
     linked_list_iter(&handle->devices, vhci_iter_internal, &iter_ctx);
-
-    return 1;
 }
 
 typedef struct vhci_find_dev_ctx
@@ -466,7 +479,7 @@ int vhci_handle_dev(void* data, size_t idx, void* ctx)
         if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
         {
             stop_sock(&dev->client);
-            return 0;
+            return -1;
         }
         else if (bytes == sizeof(hdr_cmd_t))
         {
@@ -480,7 +493,7 @@ int vhci_handle_dev(void* data, size_t idx, void* ctx)
         else if (bytes == 0)
         {
             stop_sock(&dev->client);
-            return 0;
+            return -1;
         }
 
         switch (cmd.command)
@@ -495,9 +508,7 @@ int vhci_handle_dev(void* data, size_t idx, void* ctx)
     return 0;
 }
 
-int vhci_run_once(vhci_handle_t* handle)
+void vhci_run_once(vhci_handle_t* handle)
 {
     linked_list_iter(&handle->devices, vhci_find_dev_iter, handle);
-
-    return 1;
 }
