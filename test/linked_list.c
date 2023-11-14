@@ -10,7 +10,7 @@ test(test_linked_list_create_no_alloc)
     linked_list_t list;
 
     assert_int_eq(linked_list_init(NULL, free, &list), -1);
-    assert_int_eq(errno, ENOMEM);
+    assert_int_eq(errno, EINVAL);
 }
 
 test(test_linked_list_create_no_free)
@@ -18,7 +18,7 @@ test(test_linked_list_create_no_free)
     linked_list_t list;
 
     assert_int_eq(linked_list_init(malloc, NULL, &list), -1);
-    assert_int_eq(errno, ENOMEM);
+    assert_int_eq(errno, EINVAL);
 }
 
 test(test_linked_list_create_no_fn)
@@ -26,7 +26,7 @@ test(test_linked_list_create_no_fn)
     linked_list_t list;
 
     assert_int_eq(linked_list_init(NULL, NULL, &list), -1);
-    assert_int_eq(errno, ENOMEM);
+    assert_int_eq(errno, EINVAL);
 }
 
 test(test_linked_list_create_no_list)
@@ -34,7 +34,7 @@ test(test_linked_list_create_no_list)
     linked_list_t list;
 
     assert_int_eq(linked_list_init(malloc, free, NULL), -1);
-    assert_int_eq(errno, ENOMEM);
+    assert_int_eq(errno, EINVAL);
 }
 
 test(test_linked_list_create_multiple)
@@ -115,7 +115,7 @@ test(test_linked_list_iterate)
 int iter_test_invalidate(void* data, size_t i, void* ctx)
 {
     linked_list_t* list = ctx;
-    int* value          = data;
+    int* value = data;
     switch (i)
     {
     case 0:
@@ -124,7 +124,7 @@ int iter_test_invalidate(void* data, size_t i, void* ctx)
     case 1:
         assert_int_eq(*value, 1);
         linked_list_rem(list, i);
-        return 1;
+        return -1;
     case 2:
         assert_int_eq(*value, 2);
         break;

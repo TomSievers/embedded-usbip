@@ -9,7 +9,7 @@ test(test_mem_pool_create_no_pool_obj)
     uint64_t some;
 
     assert_int_eq(init_mem_pool(sizeof(void*) / 2, &some, 0, NULL), -1);
-    assert_int_eq(errno, ENOMEM);
+    assert_int_eq(errno, EINVAL);
 }
 
 test(test_mem_pool_create_no_pool)
@@ -17,15 +17,16 @@ test(test_mem_pool_create_no_pool)
     mem_pool_t some;
 
     assert_int_eq(init_mem_pool(sizeof(void*) / 2, NULL, 0, &some), -1);
-    assert_int_eq(errno, ENOMEM);
+    assert_int_eq(errno, EINVAL);
 }
 
 test(test_mem_pool_create_too_small_pool)
 {
     uint64_t some;
 
-    assert_int_eq(init_mem_pool(sizeof(void*) / 2, &some, sizeof(void*) / 4, (mem_pool_t*)&some), -1);
-    assert_int_eq(errno, ENOMEM);
+    assert_int_eq(
+        init_mem_pool(sizeof(void*) / 2, &some, sizeof(void*) / 4, (mem_pool_t*)&some), -1);
+    assert_int_eq(errno, EINVAL);
 }
 
 test(test_mem_pool_create_obj_lt_ptr)
@@ -88,7 +89,7 @@ test(test_mem_alloc_free_unordered)
 
     mem_pool_free(&pool, one);
 
-    one         = mem_pool_alloc(&pool);
+    one = mem_pool_alloc(&pool);
     void* three = mem_pool_alloc(&pool);
 
     assert_ptr_eq(one, mem);
@@ -98,8 +99,8 @@ test(test_mem_alloc_free_unordered)
     mem_pool_free(&pool, two);
     mem_pool_free(&pool, three);
 
-    one   = mem_pool_alloc(&pool);
-    two   = mem_pool_alloc(&pool);
+    one = mem_pool_alloc(&pool);
+    two = mem_pool_alloc(&pool);
     three = mem_pool_alloc(&pool);
 
     assert_ptr_eq(one, mem + sizeof(void*) * 2);
@@ -118,11 +119,11 @@ test(test_mem_alloc_oob)
     assert_int_eq(pool.obj_size, sizeof(void*));
     assert_int_eq(pool.pool_size, sizeof(void*) * 4);
 
-    void* one   = mem_pool_alloc(&pool);
-    void* two   = mem_pool_alloc(&pool);
+    void* one = mem_pool_alloc(&pool);
+    void* two = mem_pool_alloc(&pool);
     void* three = mem_pool_alloc(&pool);
-    void* four  = mem_pool_alloc(&pool);
-    void* five  = mem_pool_alloc(&pool);
+    void* four = mem_pool_alloc(&pool);
+    void* five = mem_pool_alloc(&pool);
 
     assert_ptr_eq(one, mem);
     assert_ptr_eq(two, mem + sizeof(void*));

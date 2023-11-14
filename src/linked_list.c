@@ -7,7 +7,7 @@ int linked_list_init(alloc_fn allocator, free_fn free, linked_list_t* list)
 {
     if (allocator == NULL || free == NULL || list == NULL)
     {
-        errno = ENOMEM;
+        errno = EINVAL;
         return -1;
     }
 
@@ -26,9 +26,11 @@ int linked_list_push(linked_list_t* list, void* data)
 
     if (new_node == NULL)
     {
+        errno = ENOMEM;
         return -1;
     }
 
+    // This is the first element being added.
     if (list->size == 0)
     {
         new_node->next = NULL;
@@ -56,6 +58,8 @@ node_t* linked_list_find(linked_list_t* list, size_t i)
     {
         uint8_t direction = 0;
         node_t* cur;
+
+        // Determine if search should start at the start or end of the doubly linked list.
         if (i >= list->size / 2)
         {
             cur = list->last;
@@ -67,6 +71,7 @@ node_t* linked_list_find(linked_list_t* list, size_t i)
             cur = list->first;
         }
 
+        // Decrement until we are at the given index.
         for (; i > 0; --i)
         {
             if (direction)
@@ -103,20 +108,24 @@ void* linked_list_rem(linked_list_t* list, size_t i)
 
     if (node != NULL)
     {
+        // Move the previous pointer if set.
         if (node->prev != NULL)
         {
             node->prev->next = node->next;
         }
 
+        // Move the next pointer if set.
         if (node->next != NULL)
         {
             node->next->prev = node->prev;
         }
 
+        // Move the end pointer if this was the last element in the list.
         if (i == list->size - 1)
         {
             list->last = node->prev;
         }
+        // Move the start pointer if this was the first element in the list.
         else if (i == 0)
         {
             list->first = node->next;
@@ -143,9 +152,9 @@ void linked_list_iter(linked_list_t* list, iter_cb_t iter_cb, void* ctx)
     node_t* last = NULL;
     for (size_t i = 0; i < list->size; ++i)
     {
-        if (iter_cb(cur->data, i, ctx))
+        // Run callback and check if the current item has been invalidated.
+        if (iter_cb(cur->data, i, ctx) == -1)
         {
-            // Current pointer is invalidated.
             if (i == 0)
             {
                 cur = list->first;
