@@ -302,6 +302,8 @@ int stream_fifo_send_sock(stream_fifo_t* queue, int sock)
                 queue->head = new_head;
             }
         }
+
+        return bytes;
     }
     else if (queue->head < queue->tail)
     {
