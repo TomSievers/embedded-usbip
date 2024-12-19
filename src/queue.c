@@ -1,4 +1,5 @@
 #include "queue.h"
+#include "debug.h"
 #include "errno.h"
 #include <string.h>
 #include <sys/socket.h>
@@ -19,12 +20,14 @@ int msg_fifo_init(msg_fifo_t* queue, uint8_t* buf, size_t buf_len)
 {
     if (buf == NULL)
     {
+        DEBUG_PRINT("msg_fifo_init: buf is NULL\n");
         errno = EINVAL;
         return -1;
     }
 
     if (buf_len < sizeof(fifo_item_t))
     {
+        DEBUG_PRINT("msg_fifo_init: buf_len is too small for single fifo item\n");
         errno = ERANGE;
         return -1;
     }
@@ -49,6 +52,7 @@ static inline fifo_item_t* fifo_add_new_item(msg_fifo_t* queue, size_t msg_len)
 size_t msg_fifo_push(msg_fifo_t* queue, void* msg, size_t msg_len)
 {
     void* end = queue->start + queue->buffer_len;
+    fifo_item_t* new_item = NULL;
     // Check for wraparound of fifo
     if (queue->head + msg_len + FIFO_HDR_LEN >= end)
     {
@@ -62,10 +66,11 @@ size_t msg_fifo_push(msg_fifo_t* queue, void* msg, size_t msg_len)
             if (queue->head + msg_len + FIFO_HDR_LEN >= queue->start)
             {
                 // We would overwrite the first message, do not insert.
+                DEBUG_PRINT("msg_fifo_push: fifo full\n");
                 return 0;
             }
 
-            fifo_item_t* new_item = fifo_add_new_item(queue, msg_len);
+            new_item = fifo_add_new_item(queue, msg_len);
 
             memcpy(&new_item->data, msg, msg_len);
             queue->head = queue->start + msg_len;
@@ -76,9 +81,10 @@ size_t msg_fifo_push(msg_fifo_t* queue, void* msg, size_t msg_len)
             if (queue->start + (msg_len + FIFO_HDR_LEN) - first_block_len >= queue->start)
             {
                 // We would overwrite the first message, do not insert.
+                DEBUG_PRINT("msg_fifo_push: fifo full\n");
                 return 0;
             }
-            fifo_item_t* new_item = fifo_add_new_item(queue, msg_len);
+            new_item = fifo_add_new_item(queue, msg_len);
 
             // Write until end of fifo.
             memcpy(&new_item->data, msg, first_block_len);
@@ -89,19 +95,38 @@ size_t msg_fifo_push(msg_fifo_t* queue, void* msg, size_t msg_len)
     }
     else
     {
-        // Full message fits.
-        if (queue->head + msg_len + FIFO_HDR_LEN >= queue->first)
+        // Check if the message fits in the buffer.
+        if (queue->first == NULL && msg_len + FIFO_HDR_LEN >= queue->buffer_len)
         {
-            // We would overwrite the first message, do not insert.
+            DEBUG_PRINT("msg_fifo_push: message too large\n");
+            return 0;
+        }
+        // Check if we would overwrite the first message.
+        if (queue->first != NULL && queue->head + msg_len + FIFO_HDR_LEN >= queue->first)
+        {
+            DEBUG_PRINT("msg_fifo_push: fifo full\n");
             return 0;
         }
 
-        fifo_item_t* new_item = fifo_add_new_item(queue, msg_len);
+        new_item = fifo_add_new_item(queue, msg_len);
 
         memcpy(&new_item->data, msg, msg_len);
 
         queue->head += msg_len + FIFO_HDR_LEN;
     }
+
+    // Check if the queue is empty.
+    if (queue->first == NULL)
+    {
+        queue->first = new_item;
+        queue->last = new_item;
+    }
+    else
+    {
+        ((fifo_item_t*)(queue->last))->next = new_item;
+        queue->last = new_item;
+    }
+
     return msg_len;
 }
 
@@ -117,7 +142,7 @@ size_t msg_fifo_pop(msg_fifo_t* queue, void* out_msg, size_t out_msg_len)
         {
             void* end = queue->start + queue->buffer_len;
 
-            void* item_end = item + item->len + FIFO_HDR_LEN;
+            void* item_end = ((uint8_t*)item) + item->len + FIFO_HDR_LEN;
 
             queue->first = item->next;
 
@@ -127,12 +152,12 @@ size_t msg_fifo_pop(msg_fifo_t* queue, void* out_msg, size_t out_msg_len)
                 // This message is split.
                 size_t first_block_len = end - (void*)(item + FIFO_HDR_LEN);
 
-                memcpy(&item->data, out_msg, first_block_len);
-                memcpy(queue->start, out_msg + first_block_len, item->len - first_block_len);
+                memcpy(out_msg, &item->data, first_block_len);
+                memcpy(out_msg + first_block_len, queue->start, item->len - first_block_len);
             }
             else
             {
-                memcpy(&item->data, out_msg, item->len);
+                memcpy(out_msg, &item->data, item->len);
             }
 
             return item->len;

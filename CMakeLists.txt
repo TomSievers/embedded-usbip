@@ -30,5 +30,6 @@ if(NOT EXISTS LIBRARY_ONLY)
     enable_testing()
     add_test(NAME mem_pool COMMAND mem_pool)
     add_test(NAME linked_list COMMAND linked_list)
+    add_test(NAME queue COMMAND queue)
 endif()
 

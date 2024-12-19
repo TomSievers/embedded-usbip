@@ -484,6 +484,10 @@ int vhci_handle_dev(void* data, size_t idx, void* ctx)
     return 0;
 }
 
+void vhci_submit_urb(vhci_handle_t* handle) { }
+
+void vhci_unlink_urb(vhci_handle_t* handle) { }
+
 void vhci_run_once(vhci_handle_t* handle)
 {
     linked_list_iter(&handle->devices, vhci_find_dev_iter, handle);

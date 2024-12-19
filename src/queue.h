@@ -7,6 +7,7 @@
 typedef struct msg_fifo
 {
     void* first;
+    void* last;
     void* head;
     void* start;
     size_t buffer_len;
