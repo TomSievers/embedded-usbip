@@ -113,10 +113,15 @@ test(test_msg_fifo_pop_too_small)
 
     assert_int_eq(msg_fifo_pop(&queue, out_msg, 32), 0);
 
+    uint8_t out_msg2[64];
+
+    assert_int_eq(msg_fifo_pop(&queue, out_msg2, 64), size);
+    assert_int_eq(memcmp(out_msg2, msg, size), 0);
+
     return 1;
 }
 
-test(test_msg_fifo_wraparound)
+test(test_msg_fifo_wraparound_split)
 {
     msg_fifo_t queue;
     uint8_t buf[64];
@@ -125,13 +130,77 @@ test(test_msg_fifo_wraparound)
 
     uint8_t msg[64] = { 0x01 };
 
-    size_t size = 64 - 1 - sizeof(size_t) - sizeof(void*);
+    assert_int_eq(msg_fifo_push(&queue, msg, 16), 16);
+    assert_int_eq(msg_fifo_pop(&queue, msg, 16), 16);
 
-    assert_int_eq(msg_fifo_push(&queue, msg, size), size);
-    assert_int_eq(msg_fifo_pop(&queue, msg, size), size);
+    for (size_t i = 0; i < 32; ++i)
+    {
+        msg[i] = i;
+    }
 
-    assert_int_eq(msg_fifo_push(&queue, msg, size), size);
-    assert_int_eq(msg_fifo_pop(&queue, msg, size), size);
+    assert_int_eq(msg_fifo_push(&queue, msg, 32), 32);
+
+    uint8_t out_msg[32];
+
+    assert_int_eq(msg_fifo_pop(&queue, out_msg, 32), 32);
+
+    assert_int_eq(memcmp(out_msg, msg, 32), 0);
+
+    return 1;
+}
+
+test(test_msg_fifo_wraparound_split_edge)
+{
+    msg_fifo_t queue;
+    uint8_t buf[64];
+
+    assert_int_eq(msg_fifo_init(&queue, buf, 64), 0);
+
+    uint8_t msg[64] = { 0x01 };
+
+    assert_int_eq(msg_fifo_push(&queue, msg, 32), 32);
+    assert_int_eq(msg_fifo_pop(&queue, msg, 32), 32);
+
+    for (size_t i = 0; i < 32; ++i)
+    {
+        msg[i] = i;
+    }
+
+    assert_int_eq(msg_fifo_push(&queue, msg, 32), 32);
+
+    uint8_t out_msg[32];
+
+    assert_int_eq(msg_fifo_pop(&queue, out_msg, 32), 32);
+
+    assert_int_eq(memcmp(out_msg, msg, 32), 0);
+
+    return 1;
+}
+
+test(test_msg_fifo_wraparound_non_split)
+{
+    msg_fifo_t queue;
+    uint8_t buf[64];
+
+    assert_int_eq(msg_fifo_init(&queue, buf, 64), 0);
+
+    uint8_t msg[64] = { 0x01 };
+
+    assert_int_eq(msg_fifo_push(&queue, msg, 33), 33);
+    assert_int_eq(msg_fifo_pop(&queue, msg, 33), 33);
+
+    for (size_t i = 0; i < 32; ++i)
+    {
+        msg[i] = i;
+    }
+
+    assert_int_eq(msg_fifo_push(&queue, msg, 32), 32);
+
+    uint8_t out_msg[32];
+
+    assert_int_eq(msg_fifo_pop(&queue, out_msg, 32), 32);
+
+    assert_int_eq(memcmp(out_msg, msg, 32), 0);
 
     return 1;
 }
@@ -145,6 +214,9 @@ int main(void)
     run_test(test_msg_fifo_push_full);
     run_test(test_msg_fifo_too_large_initial);
     run_test(test_msg_fifo_pop_too_small);
+    run_test(test_msg_fifo_wraparound_split);
+    run_test(test_msg_fifo_wraparound_split_edge);
+    run_test(test_msg_fifo_wraparound_non_split);
 
     printf("Tests finished\n");
 

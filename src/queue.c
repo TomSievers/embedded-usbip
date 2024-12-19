@@ -51,6 +51,12 @@ static inline fifo_item_t* fifo_add_new_item(msg_fifo_t* queue, size_t msg_len)
 
 size_t msg_fifo_push(msg_fifo_t* queue, void* msg, size_t msg_len)
 {
+    if (queue->buffer_len < msg_len + FIFO_HDR_LEN)
+    {
+        DEBUG_PRINT("msg_fifo_push: message too large\n");
+        return 0;
+    }
+
     void* end = queue->start + queue->buffer_len;
     fifo_item_t* new_item = NULL;
     // Check for wraparound of fifo
@@ -63,7 +69,8 @@ size_t msg_fifo_push(msg_fifo_t* queue, void* msg, size_t msg_len)
             // FIFO header does not fit insert at start.
             queue->head = queue->start;
 
-            if (queue->head + msg_len + FIFO_HDR_LEN >= queue->start)
+            if (queue->first != NULL
+                && queue->start + (msg_len + FIFO_HDR_LEN) - first_block_len >= queue->first)
             {
                 // We would overwrite the first message, do not insert.
                 DEBUG_PRINT("msg_fifo_push: fifo full\n");
@@ -78,13 +85,16 @@ size_t msg_fifo_push(msg_fifo_t* queue, void* msg, size_t msg_len)
         else
         {
             // Header does fit insert all the possible data.
-            if (queue->start + (msg_len + FIFO_HDR_LEN) - first_block_len >= queue->start)
+            if (queue->first != NULL
+                && queue->start + (msg_len + FIFO_HDR_LEN) - first_block_len >= queue->first)
             {
                 // We would overwrite the first message, do not insert.
                 DEBUG_PRINT("msg_fifo_push: fifo full\n");
                 return 0;
             }
             new_item = fifo_add_new_item(queue, msg_len);
+
+            first_block_len -= FIFO_HDR_LEN;
 
             // Write until end of fifo.
             memcpy(&new_item->data, msg, first_block_len);
@@ -95,12 +105,6 @@ size_t msg_fifo_push(msg_fifo_t* queue, void* msg, size_t msg_len)
     }
     else
     {
-        // Check if the message fits in the buffer.
-        if (queue->first == NULL && msg_len + FIFO_HDR_LEN >= queue->buffer_len)
-        {
-            DEBUG_PRINT("msg_fifo_push: message too large\n");
-            return 0;
-        }
         // Check if we would overwrite the first message.
         if (queue->first != NULL && queue->head + msg_len + FIFO_HDR_LEN >= queue->first)
         {
@@ -150,7 +154,7 @@ size_t msg_fifo_pop(msg_fifo_t* queue, void* out_msg, size_t out_msg_len)
             if (item_end > end)
             {
                 // This message is split.
-                size_t first_block_len = end - (void*)(item + FIFO_HDR_LEN);
+                size_t first_block_len = end - (void*)(((uint8_t*)item) + FIFO_HDR_LEN);
 
                 memcpy(out_msg, &item->data, first_block_len);
                 memcpy(out_msg + first_block_len, queue->start, item->len - first_block_len);
