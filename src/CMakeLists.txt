@@ -12,6 +12,7 @@ set(SRCS
     queue.c
     usb/vhci.c
     usb/dev.c
+    usb/dev/cdc_acm.c
 )
 
 add_compile_options(-Wall -Werror -Wno-unused)

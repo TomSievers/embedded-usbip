@@ -62,3 +62,7 @@ vusb_dev_t* vhci_find_device(vhci_handle_t* handle, const char* busid);
  * @param handle, The Host controller to handle actions for.
  */
 void vhci_run_once(vhci_handle_t* handle);
+
+void vhci_submit_urb(vhci_handle_t* handle);
+
+void vhci_unlink_urb(vhci_handle_t* handle);

@@ -388,13 +388,20 @@ int vhci_register_dev(vhci_handle_t* handle, usb_dev_t* dev)
 
     vdev->dev = dev;
 
-    vusb_dev_t* last_vdev = linked_list_get(&handle->devices, handle->devices.size - 1);
+    uint32_t devnum = 0;
 
-    if (last_vdev == NULL)
+    if (handle->devices.size > 0)
     {
-        dev_free(vdev);
-        errno = ECANCELED;
-        return -1;
+        vusb_dev_t* last_vdev = linked_list_get(&handle->devices, handle->devices.size - 1);
+
+        if (last_vdev == NULL)
+        {
+            dev_free(vdev);
+            errno = ECANCELED;
+            return -1;
+        }
+
+        devnum = last_vdev->dev->devnum;
     }
 
     if (linked_list_push(&handle->devices, vdev) == -1)
@@ -403,7 +410,7 @@ int vhci_register_dev(vhci_handle_t* handle, usb_dev_t* dev)
         return -1;
     }
 
-    dev->devnum = last_vdev->dev->devnum + 1;
+    dev->devnum = devnum + 1;
 
     snprintf(dev->path, 256, "/dev/bus/usb/%03d/%03d", dev->busnum, dev->devnum);
     snprintf(dev->busid, 32, "%u-%u", dev->busnum, dev->devnum);
@@ -472,37 +479,6 @@ int vhci_handle_dev(void* data, size_t idx, void* ctx)
 
     if (dev->client != NO_SOCK)
     {
-        hdr_cmd_t cmd;
-
-        ssize_t bytes = recv(dev->client, &cmd, sizeof(hdr_cmd_t), 0);
-
-        if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
-        {
-            stop_sock(&dev->client);
-            return -1;
-        }
-        else if (bytes == sizeof(hdr_cmd_t))
-        {
-            cmd.command = FROM_NETWORK_ENDIAN_U16(cmd.command);
-            cmd.seq_num = FROM_NETWORK_ENDIAN_U16(cmd.seq_num);
-            cmd.busnum = FROM_NETWORK_ENDIAN_U16(cmd.busnum);
-            cmd.devnum = FROM_NETWORK_ENDIAN_U16(cmd.devnum);
-            cmd.direction = FROM_NETWORK_ENDIAN_U16(cmd.direction);
-            cmd.endpoint = FROM_NETWORK_ENDIAN_U16(cmd.endpoint);
-        }
-        else if (bytes == 0)
-        {
-            stop_sock(&dev->client);
-            return -1;
-        }
-
-        switch (cmd.command)
-        {
-        case USBIP_CMD_SUBMIT:
-            break;
-        case USBIP_CMD_UNLINK:
-            break;
-        }
     }
 
     return 0;

@@ -5,4 +5,5 @@ RUN apt-get update -y && apt-get install -y \
     cmake \
     git \
     gdb \
-    clang-format
+    clang-format \
+    usbip

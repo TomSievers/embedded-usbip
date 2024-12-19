@@ -25,6 +25,8 @@ typedef struct usb_ep_desc
             uint8_t ep_nb : 4;
             uint8_t reserved : 3;
             uint8_t dir : 1;
+#define USB_EP_IN  1
+#define USB_EP_OUT 0
         };
     };
     union
@@ -33,8 +35,20 @@ typedef struct usb_ep_desc
         struct
         {
             uint8_t txfer_type : 2;
+#define USB_EP_CTRL 0
+#define USB_EP_BULK 1
+#define USB_EP_INT  2
+#define USB_EP_ISO  3
             uint8_t sync_type : 2;
+#define USB_EP_ISO_NO_SYNC 0
+#define USB_EP_ISO_ASYNC   1
+#define USB_EP_ISO_ADAP    2
+#define USB_EP_ISO_SYNC    3
             uint8_t usage_type : 2;
+#define USB_EP_ISO_USE_DATA   0
+#define USB_EP_ISO_USE_FB     1
+#define USB_EP_ISO_USE_IMP_FB 2
+#define USB_EP_ISO_USE_RES    3
         };
     };
     union
