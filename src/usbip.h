@@ -9,7 +9,7 @@
 
 typedef struct usbip_server
 {
-    vhci_handle_t* usb_handle;
+    vhci_handle_t* vhci_handle;
     int listen_sock;
     linked_list_t client_list;
     linked_list_t dev_list;

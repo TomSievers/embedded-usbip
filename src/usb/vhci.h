@@ -63,6 +63,18 @@ vusb_dev_t* vhci_find_device(vhci_handle_t* handle, const char* busid);
  */
 void vhci_run_once(vhci_handle_t* handle);
 
-void vhci_submit_urb(vhci_handle_t* handle);
+/**
+ * @brief Submit a URB to the Host controller.
+ * @param handle, The Host controller to submit the URB to.
+ * @param urb, The URB to submit.
+ * @return int, -1 on error and errno set, otherwise 0
+ */
+int vhci_submit_urb(vhci_handle_t* handle, urb_t urb);
 
-void vhci_unlink_urb(vhci_handle_t* handle);
+/**
+ * @brief Unlink a URB from the Host controller.
+ * @param handle, The Host controller to unlink the URB from.
+ * @param seq_num, The sequence number of the URB to unlink.
+ * @return int, -1 on error and errno set, otherwise 0
+ */
+int vhci_unlink_urb(vhci_handle_t* handle, uint32_t seq_num);

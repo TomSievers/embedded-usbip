@@ -484,9 +484,17 @@ int vhci_handle_dev(void* data, size_t idx, void* ctx)
     return 0;
 }
 
-void vhci_submit_urb(vhci_handle_t* handle) { }
+int vhci_submit_urb(vhci_handle_t* handle, urb_t urb)
+{
+    errno = ENOTSUP;
+    return -1;
+}
 
-void vhci_unlink_urb(vhci_handle_t* handle) { }
+int vhci_unlink_urb(vhci_handle_t* handle, uint32_t seq_num)
+{
+    errno = ENOTSUP;
+    return -1;
+}
 
 void vhci_run_once(vhci_handle_t* handle)
 {

@@ -10,6 +10,7 @@
 
 #include "conv.h"
 #include "queue.h"
+#include "usb/urb.h"
 #include "usbip.h"
 #include "usbip_types.h"
 
@@ -50,8 +51,11 @@ typedef struct usbip_client
     uint8_t data_stream[1024];
     stream_fifo_t out_fifo;
     uint32_t state;
-#define CLIENT_PENDING_IMPORT 0x01
-#define CLIENT_DEV_IMPORTED   0x02
+#define CLIENT_PENDING_IMPORT     0x01
+#define CLIENT_DEV_IMPORTED       0x02
+#define CLIENT_PENDING_URB_SUBMIT 0x04
+#define CLIENT_PENDING_URB_UNLINK 0x08
+    uint32_t pending_urb_size;
 } usbip_client_t;
 
 void sock_stop(int sock)
@@ -197,13 +201,13 @@ int usbip_resp_devlist(usbip_server_t* handle, usbip_client_t* client, size_t i)
     hdr->hdr.op_code = TO_NETWORK_ENDIAN_U16(REP_DEVLIST);
     hdr->hdr.version = TO_NETWORK_ENDIAN_U16(USBIP_VERSION);
     hdr->hdr.status = USBIP_STATUS_OK;
-    hdr->dev_count = TO_NETWORK_ENDIAN_U32(handle->usb_handle->devices.size);
+    hdr->dev_count = TO_NETWORK_ENDIAN_U32(handle->vhci_handle->devices.size);
 
     uint8_t* dev_buf = tmp_buf + sizeof(hdr_rep_devlist_t);
 
-    if (handle->usb_handle->devices.size > 0)
+    if (handle->vhci_handle->devices.size > 0)
     {
-        vhci_iter_devices(handle->usb_handle, fill_devlist, &dev_buf);
+        vhci_iter_devices(handle->vhci_handle, fill_devlist, &dev_buf);
     }
 
     size_t length = dev_buf - tmp_buf;
@@ -243,7 +247,7 @@ int usbip_handle_import(usbip_server_t* handle, usbip_client_t* client, size_t i
     }
     else if (bytes > 0)
     {
-        vusb_dev_t* dev = vhci_find_device(handle->usb_handle, busid);
+        vusb_dev_t* dev = vhci_find_device(handle->vhci_handle, busid);
 
         if (dev != NULL)
         {
@@ -252,6 +256,10 @@ int usbip_handle_import(usbip_server_t* handle, usbip_client_t* client, size_t i
             uint8_t* res = usb_dev_to_buf(dev, tmp_buf + sizeof(hdr_common_t));
 
             length = res - tmp_buf;
+        }
+        else
+        {
+            hdr->status = TO_NETWORK_ENDIAN_U32(USBIP_STATUS_ERROR);
         }
     }
 
@@ -275,8 +283,10 @@ int usbip_accept_new_client(usbip_server_t* handle)
     // Handle a new connection
     if (client_sock != -1)
     {
+        // Get flags for new client.
         int flags = fcntl(client_sock, F_GETFL);
 
+        // Unable to get flags
         if (flags < 0)
         {
             sock_stop(client_sock);
@@ -309,6 +319,7 @@ int usbip_accept_new_client(usbip_server_t* handle)
             return -1;
         }
 
+        // Set keepalive count
         if (setsockopt(client_sock, SOL_SOCKET, TCP_KEEPCNT, &keepalive_cnt, sizeof(keepalive_cnt)))
         {
             sock_stop(client_sock);
@@ -322,9 +333,9 @@ int usbip_accept_new_client(usbip_server_t* handle)
             return -1;
         }
     }
+    // Acceptor socket failed in some way, stop this socket.
     else if (client_sock == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
     {
-        // Log error
         sock_stop(handle->listen_sock);
         return -1;
     }
@@ -342,7 +353,7 @@ int usbip_server_setup(usbip_server_t* handle, vhci_handle_t* usb_handle)
 
     memset(handle, 0, sizeof(usbip_server_t));
 
-    handle->usb_handle = usb_handle;
+    handle->vhci_handle = usb_handle;
 
     if (linked_list_init(client_node_alloc, client_node_free, &handle->client_list))
     {
@@ -394,6 +405,72 @@ int usbip_server_setup(usbip_server_t* handle, vhci_handle_t* usb_handle)
     return 0;
 }
 
+int handle_urb_submit(usbip_server_t* handle, usbip_client_t* client, size_t i, hdr_cmd_t cmd)
+{
+    uint8_t buf[28] = { 0 };
+
+    int bytes = recv(client->sock, buf, 28, 0);
+
+    if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+    {
+        client_stop(handle, client, i);
+        return -1;
+    }
+    else if (bytes == 28)
+    {
+        uint32_t txfer_flags = FROM_NETWORK_ENDIAN_U32(*(uint32_t*)(buf));
+        uint32_t txfer_buf_len = FROM_NETWORK_ENDIAN_U32(*(uint32_t*)(buf + 4));
+        uint32_t iso_start_frame = FROM_NETWORK_ENDIAN_U32(*(uint32_t*)(buf + 8));
+        uint32_t iso_pkt_cnt = FROM_NETWORK_ENDIAN_U32(*(uint32_t*)(buf + 12));
+        uint32_t interval = FROM_NETWORK_ENDIAN_U32(*(uint32_t*)(buf + 16));
+        uint64_t usb_setup = FROM_NETWORK_ENDIAN_U64(*(uint64_t*)(buf + 20));
+
+        uint8_t* txfer_buffer = malloc(txfer_buf_len);
+
+        if (txfer_buffer == NULL)
+        {
+            return -1;
+        }
+
+        bytes = recv(client->sock, txfer_buffer, txfer_buf_len, 0);
+
+        if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+        {
+            free(txfer_buffer);
+            client_stop(handle, client, i);
+            return -1;
+        }
+        else if (bytes == txfer_buf_len)
+        {
+            urb_t urb = {
+                .transfer_flags = txfer_flags,
+                .transfer_buffer_length = txfer_buf_len,
+                .start_frame = iso_start_frame,
+                .number_of_packets = iso_pkt_cnt,
+                .interval = interval,
+                .setup_packet = *((urb_setup_t*)&usb_setup),
+                .seq_num = cmd.seq_num,
+                .transfer_buffer = txfer_buffer,
+            };
+
+            if (vhci_submit_urb(handle->vhci_handle, urb) == -1)
+            {
+                free(txfer_buffer);
+                return -1;
+            }
+        }
+        else
+        {
+            free(txfer_buffer);
+            return 0;
+        }
+
+        client->state |= CLIENT_PENDING_URB_SUBMIT;
+    }
+
+    return 0;
+}
+
 int usbip_client_handle(void* data, size_t i, void* ctx)
 {
     usbip_server_t* handle = ctx;
@@ -404,7 +481,7 @@ int usbip_client_handle(void* data, size_t i, void* ctx)
         int bytes = stream_fifo_send_sock(&client->out_fifo, client->sock);
 
         // Send failed
-        if (bytes == -1 && errno == EAGAIN && errno == EWOULDBLOCK)
+        if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
         {
             client_stop(handle, client, i);
             return -1;
@@ -463,6 +540,7 @@ int usbip_client_handle(void* data, size_t i, void* ctx)
                 }
             }
         }
+        // No data from peer, close socket
         else if (bytes == 0)
         {
             client_stop(handle, client, i);
@@ -475,11 +553,13 @@ int usbip_client_handle(void* data, size_t i, void* ctx)
 
         ssize_t bytes = recv(client->sock, &cmd, sizeof(hdr_cmd_t), 0);
 
+        // Socket error, close socket
         if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
         {
             client_stop(handle, client, i);
             return -1;
         }
+        // New command from client
         else if (bytes == sizeof(hdr_cmd_t))
         {
             cmd.command = FROM_NETWORK_ENDIAN_U16(cmd.command);
@@ -498,11 +578,15 @@ int usbip_client_handle(void* data, size_t i, void* ctx)
         switch (cmd.command)
         {
         case USBIP_CMD_SUBMIT:
-            vhci_submit_urb(handle->usb_handle);
+            return handle_urb_submit(handle, client, i, cmd);
             break;
         case USBIP_CMD_UNLINK:
-            vhci_unlink_urb(handle->usb_handle);
+            vhci_unlink_urb(handle->vhci_handle, cmd.seq_num);
             break;
+            // Unknown command, close socket
+        default:
+            client_stop(handle, client, i);
+            return -1;
         }
     }
     else if (client->state & CLIENT_PENDING_IMPORT)

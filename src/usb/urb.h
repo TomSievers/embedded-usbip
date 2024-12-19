@@ -48,10 +48,6 @@ typedef struct urb_setup
 } urb_setup_t;
 #pragma pack(pop)
 
-typedef struct urb urb_t;
-
-typedef void (*urb_completion_t)(urb_t*, void*);
-
 typedef struct urb
 {
     unsigned int pipe; // endpoint information
@@ -74,7 +70,7 @@ typedef struct urb
 
     // (IN) all urbs need completion routines
     void* context; // context for completion routine
-    urb_completion_t complete; // pointer to completion routine
+    void (*complete)(struct urb*, void*); // pointer to completion routine
 
     // (OUT) status after each completion
     int status; // returned status
@@ -98,6 +94,9 @@ typedef struct urb
     // ISO only: packets are only "best effort"; each can have errors
     int error_count; // number of errors
     // struct usb_iso_packet_descriptor iso_frame_desc[0];
+
+    // Sequence number of this urb request needed for unlink requests.
+    uint32_t seq_num;
 
     struct urb* next;
 } urb_t;
