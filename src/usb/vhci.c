@@ -84,30 +84,30 @@ int vhci_init(vhci_handle_t* handle)
     return 0;
 }
 
-void vhci_urb_complete(vusb_dev_t* dev, urb_t* urb, void* ctx)
-{
-    uint16_t seq_num = *((uint16_t*)ctx);
-    uint8_t buf[512];
-    hdr_cmd_t* hdr = (hdr_cmd_t*)buf;
-    struct ret_base* ret = (struct ret_base*)(buf + sizeof(hdr_cmd_t));
-    uint8_t* data = (buf + URB_RET_HDR_SIZE);
-    memset(hdr, 0, sizeof(hdr_cmd_t));
-    hdr->command = USBIP_RET_SUBMIT;
-    hdr->seq_num = seq_num;
+// void vhci_urb_complete(vusb_dev_t* dev, urb_t* urb, void* ctx)
+// {
+//     uint16_t seq_num = *((uint16_t*)ctx);
+//     uint8_t buf[512];
+//     hdr_cmd_t* hdr = (hdr_cmd_t*)buf;
+//     struct ret_base* ret = (struct ret_base*)(buf + sizeof(hdr_cmd_t));
+//     uint8_t* data = (buf + URB_RET_HDR_SIZE);
+//     memset(hdr, 0, sizeof(hdr_cmd_t));
+//     hdr->command = USBIP_RET_SUBMIT;
+//     hdr->seq_num = seq_num;
 
-    ret->actual_length = urb->actual_length;
-    ret->error_count = urb->error_count;
-    ret->number_of_packets = urb->number_of_packets;
-    ret->start_frame = urb->start_frame;
-    ret->status = urb->status;
+//     ret->actual_length = urb->actual_length;
+//     ret->error_count = urb->error_count;
+//     ret->number_of_packets = urb->number_of_packets;
+//     ret->start_frame = urb->start_frame;
+//     ret->status = urb->status;
 
-    for (size_t i = 0; i < urb->actual_length; ++i)
-    {
-        data[i] = ((uint8_t*)urb->transfer_buffer)[i];
-    }
+//     for (size_t i = 0; i < urb->actual_length; ++i)
+//     {
+//         data[i] = ((uint8_t*)urb->transfer_buffer)[i];
+//     }
 
-    send(dev->client, buf, URB_RET_HDR_SIZE + urb->actual_length, 0);
-}
+//     send(dev->client, buf, URB_RET_HDR_SIZE + urb->actual_length, 0);
+// }
 
 void handle_get_desc(vusb_dev_t* dev, urb_t* urb)
 {
@@ -259,8 +259,8 @@ void handle_get_desc(vusb_dev_t* dev, urb_t* urb)
 void handle_urb(vusb_dev_t* dev, urb_t* urb)
 {
     uint8_t direction = PIPE_DIR(urb->pipe);
-    uint8_t ep = PIPE_EP(urb->pipe);
-    uint8_t type = PIPE_TYPE(urb->pipe);
+    uint8_t ep = PIPE_EP_GET(urb->pipe);
+    uint8_t type = PIPE_TYPE_GET(urb->pipe);
     if (ep == 0 && type == PIPE_TYPE_CTRL)
     {
         urb->actual_length = 0;
@@ -477,12 +477,10 @@ int vhci_handle_dev(void* data, size_t idx, void* ctx)
     vhci_handle_t* handle = ctx;
     vusb_dev_t* dev = data;
 
-    if (dev->client != NO_SOCK)
-    {
-    }
-
     return 0;
 }
+
+int vhci_urb_init(vhci_handle_t* handle, vusb_dev_t* dev, urb_t* urb) { return 0; }
 
 int vhci_submit_urb(vhci_handle_t* handle, urb_t urb)
 {

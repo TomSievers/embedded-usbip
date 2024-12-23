@@ -50,12 +50,7 @@ typedef struct usbip_client
     int sock;
     uint8_t data_stream[1024];
     stream_fifo_t out_fifo;
-    uint32_t state;
-#define CLIENT_PENDING_IMPORT     0x01
-#define CLIENT_DEV_IMPORTED       0x02
-#define CLIENT_PENDING_URB_SUBMIT 0x04
-#define CLIENT_PENDING_URB_UNLINK 0x08
-    uint32_t pending_urb_size;
+    vusb_dev_t* dev;
 } usbip_client_t;
 
 void sock_stop(int sock)
@@ -247,13 +242,13 @@ int usbip_handle_import(usbip_server_t* handle, usbip_client_t* client, size_t i
     }
     else if (bytes > 0)
     {
-        vusb_dev_t* dev = vhci_find_device(handle->vhci_handle, busid);
+        client->dev = vhci_find_device(handle->vhci_handle, busid);
 
-        if (dev != NULL)
+        if (client->dev != NULL)
         {
             hdr->status = TO_NETWORK_ENDIAN_U32(USBIP_STATUS_OK);
 
-            uint8_t* res = usb_dev_to_buf(dev, tmp_buf + sizeof(hdr_common_t));
+            uint8_t* res = usb_dev_to_buf(client->dev, tmp_buf + sizeof(hdr_common_t));
 
             length = res - tmp_buf;
         }
@@ -405,6 +400,42 @@ int usbip_server_setup(usbip_server_t* handle, vhci_handle_t* usb_handle)
     return 0;
 }
 
+uint8_t* write_urb_response_header(uint8_t* buf, urb_t* urb)
+{
+    buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, USBIP_RET_SUBMIT) + sizeof(uint32_t);
+    buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, urb->seq_num) + sizeof(uint32_t);
+    // DevID is always 0 for server
+    buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, 0) + sizeof(uint32_t);
+    // Direction is always 0 for server
+    buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, 0) + sizeof(uint32_t);
+    // Endpoint is always 0 for server
+    buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, 0) + sizeof(uint32_t);
+    buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, urb->status) + sizeof(uint32_t);
+    buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, urb->actual_length) + sizeof(uint32_t);
+    buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, urb->start_frame) + sizeof(uint32_t);
+    buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, urb->number_of_packets) + sizeof(uint32_t);
+    buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, urb->error_count) + sizeof(uint32_t);
+    // Padding
+    buf = WRITE_BUF_NETWORK_ENDIAN_U64(buf, 0) + sizeof(uint64_t);
+
+    return buf;
+}
+
+void urb_complete_cb(urb_t* urb, void* context)
+{
+    uint8_t buf[48] = { 0 };
+    uint8_t* buf_ptr = buf;
+    usbip_client_t* client = context;
+    buf_ptr = write_urb_response_header(buf_ptr, urb);
+
+    stream_fifo_push(&client->out_fifo, buf, buf_ptr - buf);
+
+    if (PIPE_DIR(urb->pipe) == PIPE_IN)
+    {
+        stream_fifo_push(&client->out_fifo, urb->transfer_buffer, urb->actual_length);
+    }
+}
+
 int handle_urb_submit(usbip_server_t* handle, usbip_client_t* client, size_t i, hdr_cmd_t cmd)
 {
     uint8_t buf[28] = { 0 };
@@ -418,6 +449,7 @@ int handle_urb_submit(usbip_server_t* handle, usbip_client_t* client, size_t i, 
     }
     else if (bytes == 28)
     {
+        // Parse the intial URB submit header
         uint32_t txfer_flags = FROM_NETWORK_ENDIAN_U32(*(uint32_t*)(buf));
         uint32_t txfer_buf_len = FROM_NETWORK_ENDIAN_U32(*(uint32_t*)(buf + 4));
         uint32_t iso_start_frame = FROM_NETWORK_ENDIAN_U32(*(uint32_t*)(buf + 8));
@@ -425,47 +457,47 @@ int handle_urb_submit(usbip_server_t* handle, usbip_client_t* client, size_t i, 
         uint32_t interval = FROM_NETWORK_ENDIAN_U32(*(uint32_t*)(buf + 16));
         uint64_t usb_setup = FROM_NETWORK_ENDIAN_U64(*(uint64_t*)(buf + 20));
 
-        uint8_t* txfer_buffer = malloc(txfer_buf_len);
+        urb_t urb = {
+            .transfer_flags = txfer_flags,
+            .transfer_buffer_length = txfer_buf_len,
+            .start_frame = iso_start_frame,
+            .number_of_packets = iso_pkt_cnt,
+            .interval = interval,
+            .setup_packet = *((urb_setup_t*)&usb_setup),
+            .seq_num = cmd.seq_num,
+            .transfer_buffer = NULL,
+            .pipe = PIPE_DIR(cmd.direction) | PIPE_EP_SET(cmd.endpoint),
+            .complete = urb_complete_cb,
+            .context = client,
+        };
 
-        if (txfer_buffer == NULL)
-        {
-            return -1;
-        }
+        int err = vhci_urb_init(handle->vhci_handle, client->dev, &urb);
 
-        bytes = recv(client->sock, txfer_buffer, txfer_buf_len, 0);
-
-        if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+        if (err == -1)
         {
-            free(txfer_buffer);
-            client_stop(handle, client, i);
-            return -1;
-        }
-        else if (bytes == txfer_buf_len)
-        {
-            urb_t urb = {
-                .transfer_flags = txfer_flags,
-                .transfer_buffer_length = txfer_buf_len,
-                .start_frame = iso_start_frame,
-                .number_of_packets = iso_pkt_cnt,
-                .interval = interval,
-                .setup_packet = *((urb_setup_t*)&usb_setup),
-                .seq_num = cmd.seq_num,
-                .transfer_buffer = txfer_buffer,
-            };
-
-            if (vhci_submit_urb(handle->vhci_handle, urb) == -1)
-            {
-                free(txfer_buffer);
-                return -1;
-            }
-        }
-        else
-        {
-            free(txfer_buffer);
+            urb.status = -ENOMEM;
+            write_urb_response_header(buf, &urb);
             return 0;
         }
 
-        client->state |= CLIENT_PENDING_URB_SUBMIT;
+        if (PIPE_DIR(urb.pipe) == PIPE_OUT)
+        {
+            bytes = recv(client->sock, urb.transfer_buffer, urb.transfer_buffer_length, 0);
+
+            if (bytes < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+            {
+                return -1;
+            }
+            else if (bytes == urb.transfer_buffer_length)
+            {
+                urb.actual_length = bytes;
+                vhci_submit_urb(handle->vhci_handle, urb);
+            }
+            else
+            {
+                urb.actual_length += bytes;
+            }
+        }
     }
 
     return 0;
@@ -485,21 +517,6 @@ int usbip_client_handle(void* data, size_t i, void* ctx)
         {
             client_stop(handle, client, i);
             return -1;
-        }
-        // No data left, handle further operations
-        else if (stream_fifo_length(&client->out_fifo) == 0)
-        {
-            if (client->state & CLIENT_PENDING_IMPORT)
-            {
-                client->state &= ~CLIENT_PENDING_IMPORT;
-                client->state |= CLIENT_DEV_IMPORTED;
-                return 0;
-            }
-            else
-            {
-                client_stop(handle, client, i);
-                return -1;
-            }
         }
     }
 

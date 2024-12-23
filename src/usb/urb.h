@@ -48,7 +48,15 @@ typedef struct urb_setup
 } urb_setup_t;
 #pragma pack(pop)
 
-typedef struct urb
+typedef struct usb_iso_packet_descriptor
+{
+    uint32_t offset;
+    uint32_t length;
+    uint32_t actual_length;
+    int status;
+} usb_iso_packet_descriptor_t;
+
+typedef struct urba
 {
     unsigned int pipe; // endpoint information
 #define PIPE_IN        0x01
@@ -62,11 +70,21 @@ typedef struct urb
 #define PIPE_TYPE_INTR 0x2
 #define PIPE_TYPE_ISO  0x3
 
-#define PIPE_TYPE(pipe) (pipe >> PIPE_TYPE_OFF) & PIPE_TYPE_MASK;
-#define PIPE_DIR(pipe)  (pipe) & PIPE_DIR_MASK;
-#define PIPE_EP(pipe)   pipe >> PIPE_EP_OFF;
+#define PIPE_TYPE_GET(pipe) ((pipe >> PIPE_TYPE_OFF) & PIPE_TYPE_MASK);
+#define PIPE_TYPE_SET(pipe) ((pipe & PIPE_TYPE_MASK) << PIPE_TYPE_OFF);
+#define PIPE_DIR(pipe)      ((pipe)&PIPE_DIR_MASK)
+#define PIPE_EP_GET(pipe)   (pipe >> PIPE_EP_OFF)
+#define PIPE_EP_SET(pipe)   (pipe << PIPE_EP_OFF)
 
     unsigned int transfer_flags; // URB_ISO_ASAP, URB_SHORT_NOT_OK, etc.
+#define URB_SHORT_NOT_OK        0x0001 // report short reads as errors
+#define URB_ISO_ASAP            0x0002 // iso-only; use the first unexpired slot in the schedule
+#define URB_NO_TRANSFER_DMA_MAP 0x0004 // urb->transfer_dma valid on submit
+#define URB_ZERO_PACKET         0x0040 // Finish bulk OUT with short packet
+#define URB_NO_INTERRUPT        0x0080 // HINT: no non-error interrupt needed
+#define URB_FREE_BUFFER         0x0100 // Free transfer buffer with the URB
+// Interal flags
+#define URB_INTERNAL_PARTIAL_URB 0x0200 // This is a partial URB not fully received yet.
 
     // (IN) all urbs need completion routines
     void* context; // context for completion routine
@@ -93,10 +111,12 @@ typedef struct urb
 
     // ISO only: packets are only "best effort"; each can have errors
     int error_count; // number of errors
-    // struct usb_iso_packet_descriptor iso_frame_desc[0];
+
+    struct usb_iso_packet_descriptor iso_frame_desc[0];
 
     // Sequence number of this urb request needed for unlink requests.
     uint32_t seq_num;
 
+    // Next urb in sequence (singly linked list)
     struct urb* next;
 } urb_t;

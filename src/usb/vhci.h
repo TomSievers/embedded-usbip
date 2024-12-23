@@ -8,7 +8,6 @@
 typedef struct vusb_dev
 {
     usb_dev_t* dev;
-    int client;
     urb_t urb_list;
 } vusb_dev_t;
 
@@ -78,3 +77,12 @@ int vhci_submit_urb(vhci_handle_t* handle, urb_t urb);
  * @return int, -1 on error and errno set, otherwise 0
  */
 int vhci_unlink_urb(vhci_handle_t* handle, uint32_t seq_num);
+
+/**
+ * @brief Initialize a URB for a device, allocates memory for the URB if necessary.
+ * @param handle, The Host controller to which the usb device is connected.
+ * @param dev, The device to initialize the URB for.
+ * @param urb, The URB to initialize.
+ * @return int, -1 on error and errno set, otherwise 0
+ */
+int vhci_urb_init(vhci_handle_t* handle, vusb_dev_t* dev, urb_t* urb);
