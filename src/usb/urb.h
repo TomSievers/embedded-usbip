@@ -56,7 +56,7 @@ typedef struct usb_iso_packet_descriptor
     int status;
 } usb_iso_packet_descriptor_t;
 
-typedef struct urba
+typedef struct urb
 {
     unsigned int pipe; // endpoint information
 #define PIPE_IN        0x01

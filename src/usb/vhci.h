@@ -57,6 +57,15 @@ void vhci_iter_devices(vhci_handle_t* handle, vhci_iter_cb cb, void* ctx);
 vusb_dev_t* vhci_find_device(vhci_handle_t* handle, const char* busid);
 
 /**
+ * @brief Get a device with the given busnum and devnum
+ * @param handle, The Host controller to search in.
+ * @param busnum, The bus number of the device.
+ * @param devnum, The device number of the device.
+ * @return vusb_dev_t*, Found device or NULL if not found.
+ */
+vusb_dev_t* vhci_get_device(vhci_handle_t* handle, uint32_t busnum, uint32_t devnum);
+
+/**
  * @brief Handle any neccesary actions for this Host Controller once.
  * @param handle, The Host controller to handle actions for.
  */
@@ -76,7 +85,7 @@ int vhci_submit_urb(vhci_handle_t* handle, urb_t urb);
  * @param seq_num, The sequence number of the URB to unlink.
  * @return int, -1 on error and errno set, otherwise 0
  */
-int vhci_unlink_urb(vhci_handle_t* handle, uint32_t seq_num);
+int vhci_unlink_urb(vhci_handle_t* handle, vusb_dev_t* dev, uint32_t seq_num);
 
 /**
  * @brief Initialize a URB for a device, allocates memory for the URB if necessary.

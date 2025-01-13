@@ -41,6 +41,7 @@ typedef struct hdr_cmd
 #define USBIP_DIR_IN  1
     uint32_t direction;
     uint32_t endpoint;
+    uint8_t padding[28];
 } hdr_cmd_t;
 
 typedef struct iso_packet
@@ -53,32 +54,22 @@ typedef struct iso_packet
 
 typedef struct cmd
 {
-    struct cmd_base
+    union
     {
         uint32_t txfer_flags;
-        uint32_t txfer_buf_len;
-        uint32_t iso_start_frame;
-        uint32_t iso_pkt_cnt;
-        uint32_t interval;
-        uint64_t usb_setup;
-    } base;
-    uint8_t* txfer_buffer;
-    iso_packet_t* iso_packets;
-} cmd_t;
-
-typedef struct ret
-{
-    struct ret_base
-    {
         uint32_t status;
-        uint32_t actual_length;
-        uint32_t start_frame;
-        uint32_t number_of_packets;
+        uint32_t seq_num;
+    };
+
+    uint32_t length;
+    uint32_t start_frame;
+    uint32_t number_of_packets;
+    union
+    {
         uint32_t error_count;
-        uint64_t padding;
-    } base;
-    uint8_t* txfer_buffer;
-    iso_packet_t* iso_packets;
-} ret_t;
+        uint32_t interval;
+    };
+    uint32_t setup[2];
+} cmd_t;
 
 #pragma pack(pop)

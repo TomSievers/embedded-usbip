@@ -10,6 +10,13 @@ typedef struct mem_pool
     void* free_block;
 } mem_pool_t;
 
+#define INIT_MEM_POOL(name, type, size)                                                            \
+    static type _##name##_pool[size];                                                              \
+    static mem_pool_t name = { .pool_size = size,                                                  \
+        .obj_size = sizeof(type),                                                                  \
+        .pool_start = _##name##_pool,                                                              \
+        .free_block = _##name##_pool };
+
 /**
  * @brief Initialize a memory pool.
  * @param obj_size, The size of the objects being allocated in this pool, the real size will be at

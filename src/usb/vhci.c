@@ -472,6 +472,38 @@ vusb_dev_t* vhci_find_device(vhci_handle_t* handle, const char* busid)
     return ctx.dev;
 }
 
+typedef struct vhci_get_dev_ctx
+{
+    uint32_t busnum;
+    uint32_t devnum;
+    vusb_dev_t* dev;
+} vhci_get_dev_ctx_t;
+
+int vhci_get_dev_iter(void* data, size_t idx, void* ctx)
+{
+    vhci_get_dev_ctx_t* find_ctx = ctx;
+    vusb_dev_t* dev = data;
+
+    if (dev->dev->busnum == find_ctx->busnum && dev->dev->devnum == find_ctx->devnum)
+    {
+        find_ctx->dev = dev;
+    }
+
+    return 0;
+}
+
+vusb_dev_t* vhci_get_device(vhci_handle_t* handle, uint32_t busnum, uint32_t devnum)
+{
+    vhci_get_dev_ctx_t ctx = {
+        .devnum = devnum,
+        .busnum = busnum,
+        .dev = NULL,
+    };
+    linked_list_iter(&handle->devices, vhci_get_dev_iter, &ctx);
+
+    return ctx.dev;
+}
+
 int vhci_handle_dev(void* data, size_t idx, void* ctx)
 {
     vhci_handle_t* handle = ctx;
@@ -488,7 +520,7 @@ int vhci_submit_urb(vhci_handle_t* handle, urb_t urb)
     return -1;
 }
 
-int vhci_unlink_urb(vhci_handle_t* handle, uint32_t seq_num)
+int vhci_unlink_urb(vhci_handle_t* handle, vusb_dev_t* dev, uint32_t seq_num)
 {
     errno = ENOTSUP;
     return -1;

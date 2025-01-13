@@ -18,6 +18,10 @@ typedef struct linked_list
     free_fn free;
 } linked_list_t;
 
+#define INIT_LINKED_LIST(name, alloc, free_fn)                                                     \
+    static linked_list_t name                                                                      \
+        = { .size = 0, .first = NULL, .last = NULL, .allocator = alloc, .free = free_fn };
+
 /**
  * @brief Iterator callback
  * @param obj, Pointer to the current object of iteration.
