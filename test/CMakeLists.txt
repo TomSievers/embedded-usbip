@@ -8,3 +8,6 @@ target_link_libraries(linked_list ${PROJECT_NAME})
 
 add_executable(queue queue.c)
 target_link_libraries(queue ${PROJECT_NAME})
+
+add_executable(heap heap.c)
+target_link_libraries(heap ${PROJECT_NAME})
