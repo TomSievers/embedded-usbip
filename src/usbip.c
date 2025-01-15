@@ -99,10 +99,22 @@ int add_client(usbip_server_t* handle, int sock)
     return 0;
 }
 
-uint8_t* usb_dev_to_buf(vusb_dev_t* dev, uint8_t* buf)
+int usb_dev_to_buf(stream_fifo_t* fifo, vusb_dev_t* dev)
 {
-    buf = memcpy(buf, dev->dev->path, 256) + 256;
-    buf = memcpy(buf, dev->dev->busid, 32) + 32;
+    if (stream_fifo_push(fifo, dev->dev->path, 256) == 0)
+    {
+        return -1;
+    }
+
+    if (stream_fifo_push(fifo, dev->dev->busid, 32) == 0)
+    {
+        return -1;
+    }
+
+    uint8_t temp[32] = { 0 };
+
+    uint8_t* buf = temp;
+
     buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, dev->dev->busnum) + sizeof(uint32_t);
     buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, dev->dev->devnum) + sizeof(uint32_t);
     buf = WRITE_BUF_NETWORK_ENDIAN_U32(buf, dev->dev->speed) + sizeof(uint32_t);
@@ -133,10 +145,15 @@ uint8_t* usb_dev_to_buf(vusb_dev_t* dev, uint8_t* buf)
 
     buf += 1;
 
-    return buf;
+    if (stream_fifo_push(fifo, temp, buf - temp) == 0)
+    {
+        return -1;
+    }
+
+    return 0;
 }
 
-uint8_t* usb_dev_if_to_buf(vusb_dev_t* dev, uint8_t* buf)
+int usb_dev_if_to_buf(stream_fifo_t* fifo, vusb_dev_t* dev)
 {
 
     usb_conf_t* conf = usb_dev_get_config(dev->dev, dev->dev->cur_config);
@@ -150,14 +167,13 @@ uint8_t* usb_dev_if_to_buf(vusb_dev_t* dev, uint8_t* buf)
             usb_if_t* cur_if = cur->interfaces;
             while (cur_if != NULL)
             {
-                *buf = cur_if->desc.bInterfaceClass;
-                buf += 1;
-                *buf = cur_if->desc.bInterfaceSubClass;
-                buf += 1;
-                *buf = cur_if->desc.bInterfaceProtocol;
-                buf += 1;
-                *buf = 0;
-                buf += 1;
+                uint8_t temp[] = { cur_if->desc.bInterfaceClass, cur_if->desc.bInterfaceSubClass,
+                    cur_if->desc.bInterfaceProtocol, 0 };
+
+                if (stream_fifo_push(fifo, temp, sizeof(temp)) == 0)
+                {
+                    return -1;
+                }
 
                 cur_if = cur_if->next;
             }
@@ -165,40 +181,43 @@ uint8_t* usb_dev_if_to_buf(vusb_dev_t* dev, uint8_t* buf)
         }
     }
 
-    return buf;
+    return 0;
 }
 
 void fill_devlist(vusb_dev_t* dev, void* ctx)
 {
-    uint8_t* buf = (*(void**)ctx);
-    buf = usb_dev_to_buf(dev, buf);
-    buf = usb_dev_if_to_buf(dev, buf);
+    stream_fifo_t* fifo = (*(void**)ctx);
+    int err = usb_dev_to_buf(fifo, dev);
 
-    (*(void**)ctx) = buf;
+    if (err == -1)
+    {
+        return;
+    }
+
+    err = usb_dev_if_to_buf(fifo, dev);
+
+    if (err == -1)
+    {
+        return;
+    }
 }
 
 int usbip_resp_devlist(usbip_server_t* handle, usbip_client_t* client, size_t i)
 {
-    hdr_rep_devlist_t* hdr = (hdr_rep_devlist_t*)tmp_buf;
+    hdr_rep_devlist_t reply = { .hdr = { .op_code = TO_NETWORK_ENDIAN_U16(REP_DEVLIST),
+                                    .version = TO_NETWORK_ENDIAN_U16(USBIP_VERSION),
+                                    .status = TO_NETWORK_ENDIAN_U32(USBIP_STATUS_OK) },
+        .dev_count = TO_NETWORK_ENDIAN_U32(handle->vhci_handle->devices.size) };
 
-    hdr->hdr.op_code = TO_NETWORK_ENDIAN_U16(REP_DEVLIST);
-    hdr->hdr.version = TO_NETWORK_ENDIAN_U16(USBIP_VERSION);
-    hdr->hdr.status = USBIP_STATUS_OK;
-    hdr->dev_count = TO_NETWORK_ENDIAN_U32(handle->vhci_handle->devices.size);
-
-    uint8_t* dev_buf = tmp_buf + sizeof(hdr_rep_devlist_t);
-
-    if (handle->vhci_handle->devices.size > 0)
-    {
-        vhci_iter_devices(handle->vhci_handle, fill_devlist, &dev_buf);
-    }
-
-    size_t length = dev_buf - tmp_buf;
-
-    if (stream_fifo_push(&client->out_fifo, tmp_buf, length) == 0)
+    if (stream_fifo_push(&client->out_fifo, &reply, sizeof(hdr_rep_devlist_t)) == 0)
     {
         client_stop(handle, client, i);
         return -1;
+    }
+
+    if (handle->vhci_handle->devices.size > 0)
+    {
+        vhci_iter_devices(handle->vhci_handle, fill_devlist, &client->out_fifo);
     }
 
     return 0;
@@ -210,11 +229,11 @@ int usbip_handle_import(usbip_server_t* handle, usbip_client_t* client, size_t i
 
     int bytes = recv(client->sock, busid, 32, 0);
 
-    hdr_common_t* hdr = (hdr_common_t*)tmp_buf;
+    hdr_common_t hdr = { 0 };
 
-    hdr->version = TO_NETWORK_ENDIAN_U16(USBIP_VERSION);
-    hdr->op_code = TO_NETWORK_ENDIAN_U16(REP_IMPORT);
-    hdr->status = TO_NETWORK_ENDIAN_U32(USBIP_STATUS_ERROR);
+    hdr.version = TO_NETWORK_ENDIAN_U16(USBIP_VERSION);
+    hdr.op_code = TO_NETWORK_ENDIAN_U16(REP_IMPORT);
+    hdr.status = TO_NETWORK_ENDIAN_U32(USBIP_STATUS_ERROR);
 
     int length = 8;
 
@@ -234,22 +253,22 @@ int usbip_handle_import(usbip_server_t* handle, usbip_client_t* client, size_t i
 
         if (dev != NULL)
         {
-            hdr->status = TO_NETWORK_ENDIAN_U32(USBIP_STATUS_OK);
+            hdr.status = TO_NETWORK_ENDIAN_U32(USBIP_STATUS_OK);
 
-            uint8_t* res = usb_dev_to_buf(dev, tmp_buf + sizeof(hdr_common_t));
+            if (stream_fifo_push(&client->out_fifo, &hdr, sizeof(hdr)) == 0)
+            {
+                client_stop(handle, client, i);
+                return -1;
+            }
 
-            length = res - tmp_buf;
+            int err = usb_dev_to_buf(&client->out_fifo, dev);
+
+            if (err == -1)
+            {
+                client_stop(handle, client, i);
+                return -1;
+            }
         }
-        else
-        {
-            hdr->status = TO_NETWORK_ENDIAN_U32(USBIP_STATUS_ERROR);
-        }
-    }
-
-    if (stream_fifo_push(&client->out_fifo, tmp_buf, length) == 0)
-    {
-        client_stop(handle, client, i);
-        return -1;
     }
 
     return 0;
