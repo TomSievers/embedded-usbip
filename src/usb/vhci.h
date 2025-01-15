@@ -14,6 +14,8 @@ typedef struct vusb_dev
 typedef struct vhci_handle
 {
     linked_list_t devices;
+    uint32_t last_busnum;
+    uint32_t last_devnum;
 } vhci_handle_t;
 
 typedef void (*vhci_iter_cb)(vusb_dev_t* dev, void* ctx);

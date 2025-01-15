@@ -66,12 +66,12 @@ static void stop_sock(int* sock)
 int vhci_init(vhci_handle_t* handle)
 {
 #ifdef DEV_POOL_SIZE
-    init_mem_pool(sizeof(vusb_dev_t), dev_pool, DEV_POOL_SIZE, dev_mem_pool);
-    init_mem_pool(sizeof(node_t), dev_node_pool, DEV_POOL_SIZE, dev_node_mem_pool);
+    init_obj_mem_pool(sizeof(vusb_dev_t), dev_pool, DEV_POOL_SIZE, dev_mem_pool);
+    init_obj_mem_pool(sizeof(node_t), dev_node_pool, DEV_POOL_SIZE, dev_node_mem_pool);
 #endif
 
 #ifdef URB_POOL_SIZE
-    init_mem_pool(sizeof(urb_t), urb_mem_pool, URB_POOL_SIZE, urb_mem_pool);
+    init_obj_mem_pool(sizeof(urb_t), urb_mem_pool, URB_POOL_SIZE, urb_mem_pool);
 #endif
 
     memset(handle, 0, sizeof(vhci_handle_t));
@@ -83,31 +83,6 @@ int vhci_init(vhci_handle_t* handle)
 
     return 0;
 }
-
-// void vhci_urb_complete(vusb_dev_t* dev, urb_t* urb, void* ctx)
-// {
-//     uint16_t seq_num = *((uint16_t*)ctx);
-//     uint8_t buf[512];
-//     hdr_cmd_t* hdr = (hdr_cmd_t*)buf;
-//     struct ret_base* ret = (struct ret_base*)(buf + sizeof(hdr_cmd_t));
-//     uint8_t* data = (buf + URB_RET_HDR_SIZE);
-//     memset(hdr, 0, sizeof(hdr_cmd_t));
-//     hdr->command = USBIP_RET_SUBMIT;
-//     hdr->seq_num = seq_num;
-
-//     ret->actual_length = urb->actual_length;
-//     ret->error_count = urb->error_count;
-//     ret->number_of_packets = urb->number_of_packets;
-//     ret->start_frame = urb->start_frame;
-//     ret->status = urb->status;
-
-//     for (size_t i = 0; i < urb->actual_length; ++i)
-//     {
-//         data[i] = ((uint8_t*)urb->transfer_buffer)[i];
-//     }
-
-//     send(dev->client, buf, URB_RET_HDR_SIZE + urb->actual_length, 0);
-// }
 
 void handle_get_desc(vusb_dev_t* dev, urb_t* urb)
 {
@@ -261,6 +236,7 @@ void handle_urb(vusb_dev_t* dev, urb_t* urb)
     uint8_t direction = PIPE_DIR(urb->pipe);
     uint8_t ep = PIPE_EP_GET(urb->pipe);
     uint8_t type = PIPE_TYPE_GET(urb->pipe);
+
     if (ep == 0 && type == PIPE_TYPE_CTRL)
     {
         urb->actual_length = 0;
@@ -374,9 +350,15 @@ int vhci_register_dev(vhci_handle_t* handle, usb_dev_t* dev)
         return -1;
     }
 
-    dev->busnum = 1;
-    dev->devnum = 1;
-    dev->bus = 1;
+    // Check if the current device number is at the maximum, if so increment the bus number
+    if (handle->last_devnum >= UINT16_MAX)
+    {
+        handle->last_devnum = 0;
+        handle->last_busnum++;
+    }
+
+    dev->devnum = handle->last_devnum++;
+    dev->busnum = handle->last_busnum;
 
     vusb_dev_t* vdev = dev_alloc(sizeof(vusb_dev_t));
 
@@ -388,29 +370,11 @@ int vhci_register_dev(vhci_handle_t* handle, usb_dev_t* dev)
 
     vdev->dev = dev;
 
-    uint32_t devnum = 0;
-
-    if (handle->devices.size > 0)
-    {
-        vusb_dev_t* last_vdev = linked_list_get(&handle->devices, handle->devices.size - 1);
-
-        if (last_vdev == NULL)
-        {
-            dev_free(vdev);
-            errno = ECANCELED;
-            return -1;
-        }
-
-        devnum = last_vdev->dev->devnum;
-    }
-
     if (linked_list_push(&handle->devices, vdev) == -1)
     {
         dev_free(vdev);
         return -1;
     }
-
-    dev->devnum = devnum + 1;
 
     snprintf(dev->path, 256, "/dev/bus/usb/%03d/%03d", dev->busnum, dev->devnum);
     snprintf(dev->busid, 32, "%u-%u", dev->busnum, dev->devnum);
@@ -512,7 +476,12 @@ int vhci_handle_dev(void* data, size_t idx, void* ctx)
     return 0;
 }
 
-int vhci_urb_init(vhci_handle_t* handle, vusb_dev_t* dev, urb_t* urb) { return 0; }
+int vhci_urb_init(vhci_handle_t* handle, vusb_dev_t* dev, urb_t* urb)
+{
+    urb->status = 0;
+
+    return 0;
+}
 
 int vhci_submit_urb(vhci_handle_t* handle, urb_t urb)
 {

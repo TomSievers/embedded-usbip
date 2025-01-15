@@ -71,8 +71,6 @@ void client_stop(usbip_server_t* handle, usbip_client_t* client, size_t i)
     client_free(client);
 }
 
-static uint8_t tmp_buf[4096];
-
 int add_client(usbip_server_t* handle, int sock)
 {
     usbip_client_t* client = client_alloc();
